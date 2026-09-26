@@ -19,6 +19,7 @@ cd frontend && npm run build                     # debe compilar sin errores
 ```
 
 - Gestor oficial: **npm** (lockfiles `package-lock.json`). Bun está instalado en la máquina pero **no** se usa en el proyecto: no generes `bun.lock` ni mezcles gestores.
+- Migraciones locales `003` (índices) y `004` (columnas de seguridad de `users`): **ejecuta la 004 antes de arrancar el backend** o el login fallará.
 - Entorno: copia `backend/.env.example` → `backend/.env` y `frontend/.env.example` → `frontend/.env.local`. El backend no arranca sin `JWT_SECRET` y `DATABASE_URL`.
 
 ## 3. Estructura y dónde va cada cosa
@@ -52,8 +53,13 @@ cd frontend && npm run build                     # debe compilar sin errores
 - Las respuestas de la API **no devuelven** `password_hash`, emails de otros usuarios ni campos internos.
 - Los logs no incluyen contraseñas, emails, tokens, contenido de mensajes ni PII: solo `user_id`, acción y hora.
 - Errores al cliente: genéricos y sin detalles internos. Login: mismo error para "usuario no existe" y "contraseña errónea".
-- Rate limiting en endpoints de auth (5 intentos / 15 min por IP).
-
+- Rate limiting en endpoints de auth (5 intentos / 15 min por IP) y por usuario en las rutas autenticadas (`userLimiter`).
+- **Toda ruta nueva** nace con `authMiddleware` + `userLimiter` salvo que sea intencionadamente pública (y entonces con su propio límite). Sin rutas admin, sin `express.static`.
+- Entrada de texto libre: pásala por `sanitizeText` (`utils/sanitize.js`) antes de validar y guardar. Listas blancas para todo valor cerrado (enums, orígenes, campos actualizables).
+- Registra eventos de seguridad con `audit(evento, { user_id })`; nunca email, contraseña, token ni contenido.
+- Auth: la respuesta a "no existe", "contraseña errónea" y "cuenta bloqueada" es idéntica. Los tokens de enlace (verificación, recuperación) se guardan **hasheados**, caducan (15–60 min) y son de un solo uso.
+- Si algún día hay cookies: `HttpOnly; Secure; SameSite` + token CSRF. Si hay pagos, webhooks o IA, leer antes las reglas de `Seguridad/02-hardening.md` (#7–#10).
+- Medidas aplicadas y reglas para funciones futuras: `Seguridad/02-hardening.md`.
 ## 5b. Escalabilidad (regla al escribir código)
 
 - **Toda lista se pagina por cursor** con el contrato `{ data, next_cursor }` y `limit` con tope (`backend/src/utils/pagination.js`). Nunca `OFFSET`, nunca listas sin límite.
