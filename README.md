@@ -15,6 +15,13 @@ Arquitectura/    stack y guías de integración
 Seguridad/       checklist de 10 puntos
 ```
 
+## Documentación
+
+- `PRD.md`: producto, alcance y estado por user story
+- `Architecture.md`: arquitectura, API y deuda técnica de seguridad
+- `Design_System.md`: identidad visual, componentes y copy
+- `AGENTS.md`: instrucciones para agentes y colaboradores
+
 ## Puesta en marcha
 
 ```bash
@@ -32,4 +39,3 @@ cd backend && npm install && npm run dev
 cd frontend && npm install && npm run dev
 ```
 
-En Windows, `scripts/start-frontend.bat` arranca el frontend.
