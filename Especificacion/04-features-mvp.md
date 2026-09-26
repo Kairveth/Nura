@@ -1,6 +1,6 @@
 # Features MVP
 
-## Frontend (Next.js + React)
+## Frontend (Vite + React)
 
 | Feature | Priority | Effort | Owner | Status |
 |---------|----------|--------|-------|--------|

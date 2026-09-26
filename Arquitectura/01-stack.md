@@ -1,7 +1,8 @@
 # Stack Técnico
 
 ## Frontend
-- **Next.js 14** (already on Vercel)
+- **Vite 5 + React 18** (desplegable en Vercel como SPA)
+- **react-router-dom 7** (rutas)
 - **React 18**
 - **TailwindCSS** (accessible, built-in dark mode prep)
 - **axios** (HTTP client)
@@ -40,7 +41,7 @@
 - **Database migrations:** simple SQL scripts (no Prisma/Sequelize MVP)
 
 ## Secrets
-- .env.local (frontend, public OK: NEXT_PUBLIC_API_URL)
+- .env.local (frontend, public OK: VITE_API_URL)
 - .env (backend, private: DB_URL, JWT_SECRET, EMAIL_API_KEY)
 - Never commit .env files
 
@@ -49,7 +50,8 @@
 **Frontend:**
 ```json
 {
-  "next": "^14",
+  "vite": "^5",
+  "react-router-dom": "^7",
   "react": "^18",
   "tailwindcss": "^3",
   "axios": "^1",
