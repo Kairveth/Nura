@@ -19,7 +19,7 @@ cd frontend && npm run build                     # debe compilar sin errores
 ```
 
 - Gestor oficial: **npm** (lockfiles `package-lock.json`). Bun está instalado en la máquina pero **no** se usa en el proyecto: no generes `bun.lock` ni mezcles gestores.
-- Migraciones locales `003` (índices) y `004` (columnas de seguridad de `users`): **ejecuta la 004 antes de arrancar el backend** o el login fallará.
+- **El esquema real de la BD es la fuente de verdad** (ids UUID; nombres distintos a los de la especificación). Está descrito en `migrations/000_baseline_schema.sql` (local, no versionada); la API mantiene su contrato (`neurotipo`, `action`). Antes de escribir SQL, comprueba las columnas reales. Las migraciones `003` (índices) y `004` (seguridad de `users`) ya están aplicadas; una BD nueva las necesita para que el login funcione.
 - Entorno: copia `backend/.env.example` → `backend/.env` y `frontend/.env.example` → `frontend/.env.local`. El backend no arranca sin `JWT_SECRET` y `DATABASE_URL`.
 
 ## 3. Estructura y dónde va cada cosa
@@ -62,8 +62,8 @@ cd frontend && npm run build                     # debe compilar sin errores
 - Medidas aplicadas y reglas para funciones futuras: `Seguridad/02-hardening.md`.
 ## 5b. Escalabilidad (regla al escribir código)
 
-- **Toda lista se pagina por cursor** con el contrato `{ data, next_cursor }` y `limit` con tope (`backend/src/utils/pagination.js`). Nunca `OFFSET`, nunca listas sin límite.
-- **Un filtro nuevo = un índice nuevo** que combine el filtro con el orden (`(columna, id DESC)`). Añádelo en una migración local y comprueba con `EXPLAIN ANALYZE`.
+- **Toda lista se pagina por cursor** con el contrato `{ data, next_cursor }` y `limit` con tope (`backend/src/utils/pagination.js`). Los ids son **UUID**: ordena por `(created_at DESC, id DESC)`, nunca por `id`. Nunca `OFFSET`, nunca listas sin límite.
+- **Un filtro nuevo = un índice nuevo** que combine el filtro con el orden (`(columna, created_at DESC, id DESC)`). Añádelo en una migración local y comprueba con `EXPLAIN ANALYZE`.
 - Usa el pool compartido `backend/src/db.js`; **no** crees más `new Pool`.
 - Prefiere `NOT EXISTS` a `NOT IN`, selecciona solo las columnas necesarias y evita consultas dentro de bucles (N+1).
 - El backend no guarda estado en memoria del proceso (salvo el rate limit, ver `Architecture.md` §9); piensa siempre en varias réplicas.
