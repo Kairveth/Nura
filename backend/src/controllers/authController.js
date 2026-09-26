@@ -1,11 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { Pool } from 'pg';
+import pool from '../db.js';
 import { log } from '../utils/logger.js';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
-});
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 8;
