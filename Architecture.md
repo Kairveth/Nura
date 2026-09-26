@@ -45,13 +45,16 @@ El esquema SQL vive en migraciones locales, **fuera del repo**.
 
 ### Middlewares globales (`index.js`)
 
-1. Validación de variables de entorno: sale si faltan `JWT_SECRET` o `DATABASE_URL`.
-2. `trust proxy` en producción (detrás de Render, para que el rate limit use la IP real).
-3. `helmet()` → cabeceras de seguridad.
-4. `cors` limitado a `FRONTEND_URL`.
-5. `express.json({ limit: '10kb' })`.
-6. `apiLimiter`: 30 peticiones/min por IP.
-7. Rutas → 404 JSON → `errorHandler` (en producción no filtra el mensaje interno).
+1. Validación de variables de entorno: sale si faltan `JWT_SECRET` o `DATABASE_URL` (y `FRONTEND_URL` en producción).
+2. `x-powered-by` desactivado; `trust proxy` en producción (detrás de Render, para que el rate limit use la IP real).
+3. `helmet()` con **HSTS** (2 años, subdominios, preload), `frameguard: deny` y `Referrer-Policy: no-referrer`.
+4. **CORS** con lista blanca (`FRONTEND_URL`), métodos y cabeceras explícitos, sin credenciales.
+5. `originCheck`: rechaza con 403 escrituras cuyo `Origin` no esté en la lista (defensa CSRF).
+6. `express.json({ limit: '10kb' })`.
+7. `Cache-Control: no-store` en `/api` y `apiLimiter` (60 peticiones/min por IP).
+8. Rutas → 404 JSON → `errorHandler` (en producción no filtra el mensaje interno). Sin archivos estáticos ni rutas admin.
+
+Las rutas autenticadas añaden `authMiddleware` (JWT + `token_version`) y `userLimiter` (60/min por usuario).
 
 ### Endpoints
 
@@ -63,6 +66,7 @@ El esquema SQL vive en migraciones locales, **fuera del repo**.
 | PUT | `/api/profiles` | JWT | Edita el perfil propio |
 | GET | `/api/profiles/feed` | JWT | Perfiles aún no valorados, con filtros. **Paginado por cursor** |
 | GET | `/api/profiles/:userId` | JWT | Perfil por id |
+| POST | `/api/auth/logout-all` | JWT | Restablece **todas** las sesiones del usuario |
 | POST | `/api/swipes` | JWT | Registra sí/no; el match se crea en BD si es mutuo |
 | GET | `/api/swipes/matches` | JWT | Matches del usuario con los datos del otro. **Paginado por cursor** |
 | GET | `/health` | — | Comprobación de vida |
@@ -88,8 +92,10 @@ GET /api/swipes/matches?limit=10&cursor=<id>
 
 - Registro: valida tipo, formato de email y contraseña (8–72 bytes); normaliza el email a minúsculas; hash con `bcryptjs` (10 rondas).
 - Login: siempre compara contra un hash (real o de relleno) para no filtrar por tiempo qué emails existen; error genérico `Invalid credentials`.
-- Token: JWT HS256 firmado con `JWT_SECRET`, expira en 1 h, se envía como `Authorization: Bearer`.
-- El middleware `authMiddleware` valida el token y fija `req.user`.
+- Bloqueo de cuenta: 5 fallos seguidos → bloqueada 15 min (`failed_logins`, `locked_until`); la respuesta sigue siendo el mismo `401`.
+- Token: JWT **solo HS256**, firmado con `JWT_SECRET`, expira en 1 h, se envía como `Authorization: Bearer` e incluye `tv` (`token_version`).
+- `authMiddleware` valida el token **y** que `tv` coincida con el de la BD; `POST /api/auth/logout-all` lo incrementa y todos los tokens anteriores dejan de valer. Si no puede comprobarse, falla cerrado.
+- Eventos de seguridad `AUDIT` (login, bloqueos, límites, sesiones) sin PII. Detalle y estado de cada medida en `Seguridad/02-hardening.md`.
 
 ### Datos
 
@@ -102,7 +108,7 @@ PostgreSQL con `users`, `profiles`, `swipes`, `matches` y `messages` (esta últi
 | Backend (`backend/.env`) | Uso |
 |---|---|
 | `NODE_ENV`, `PORT` | Modo y puerto (3001) |
-| `FRONTEND_URL` | Origen permitido por CORS |
+| `FRONTEND_URL` | Lista blanca de orígenes CORS (varios separados por comas); obligatoria en producción |
 | `DATABASE_URL` | Conexión a PostgreSQL |
 | `JWT_SECRET` | Firma de tokens (≥ 48 bytes aleatorios) |
 | `DB_POOL_MAX` | Conexiones máximas del pool (opcional, 10 por defecto) |
