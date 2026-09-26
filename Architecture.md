@@ -81,7 +81,7 @@ GET /api/swipes/matches?limit=10&cursor=<id>
 → 200 { "data": [ ... ], "next_cursor": "<id>" | null }
 ```
 
-- Orden fijo `id DESC`; el cursor es el `id` de la última fila recibida. `next_cursor: null` = no hay más.
+- Los ids son **UUID** (sin orden cronológico): el orden fijo es `created_at DESC, id DESC` y el cursor es **opaco** (codifica `created_at` con microsegundos y el `id` de la última fila). `next_cursor: null` = no hay más.
 - `limit`: por defecto 10, **máximo 20** (`utils/pagination.js`). Cursor inválido → 400.
 - El servidor pide `limit + 1` filas para saber si hay siguiente página sin `COUNT(*)`.
 - Filtros validados: edad 18–120, `neurotipo` de una lista cerrada, `location` ≤ 100 caracteres.
@@ -101,7 +101,9 @@ GET /api/swipes/matches?limit=10&cursor=<id>
 
 PostgreSQL con `users`, `profiles`, `swipes`, `matches` y `messages` (esta última pendiente). Reglas de negocio en BD: unicidad de swipe por par, borrado en cascada al eliminar usuario y match automático cuando ambos dicen sí. Consultas siempre parametrizadas (`$1`, `$2`…).
 
-**Índices** (migración local `003`): `profiles(neurotipo, id DESC)`, `profiles(location, id DESC)`, `profiles(age, id DESC)` para filtrar y ordenar por cursor; `matches(user_a, id DESC)` y `matches(user_b, id DESC)` para el listado. Se eliminaron los redundantes (los cubre `UNIQUE(user_id)` y `UNIQUE(swiper_id, swiped_id)`). Comprobar con `EXPLAIN ANALYZE`.
+**Índices** (migración local `003`, aplicada): el orden base `(created_at DESC, id DESC)` y cada filtro del feed (tipo, ubicación) combinado con ese orden, más edad; en `matches`, por usuario y orden; en `messages`, por match y orden (chat). Se eliminaron los redundantes que ya cubren las restricciones `UNIQUE`. Comprobar con `EXPLAIN ANALYZE`.
+
+**Match mutuo:** no hay trigger en la BD. `POST /api/swipes` lo crea dentro de una **transacción con bloqueo por pareja** (`pg_advisory_xact_lock`): si dos personas se dan "sí" a la vez, la segunda espera a la primera y no se pierde ningún match ni se duplica. La pareja se guarda en orden canónico (id menor primero). La API expone `neurotipo` aunque la columna se llame distinto.
 
 ### Variables de entorno
 
