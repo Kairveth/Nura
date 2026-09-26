@@ -77,3 +77,6 @@ design.md
 
 # Guía temporal de integración (pasos de BD), solo local
 Arquitectura/02-week2-setup.md
+
+# Notas locales (p. ej. pendientes de seguridad, no publicar)
+*.local.md
