@@ -1,17 +1,35 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { audit, ipTag } from '../utils/logger.js';
 
-export const loginLimiter = rateLimit({
+const limiter = (options) =>
+  rateLimit({
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res, next, opts) => {
+      audit('rate_limited', { route: req.baseUrl + req.path, user_id: req.user?.id ?? null, ip: ipTag(req) });
+      res.status(opts.statusCode).json(opts.message);
+    },
+    ...options
+  });
+
+// Registro y login: 5 intentos / 15 min por IP (además del bloqueo por cuenta en authController)
+export const loginLimiter = limiter({
   windowMs: 15 * 60 * 1000,
   max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many attempts' }
 });
 
-export const apiLimiter = rateLimit({
+// Red de seguridad global por IP
+export const apiLimiter = limiter({
   windowMs: 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
+  max: 60,
+  message: { error: 'Too many requests' }
+});
+
+// Por usuario autenticado (se monta después de authMiddleware): frena scraping y swipes en ráfaga
+export const userLimiter = limiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  keyGenerator: (req) => (req.user ? `u:${req.user.id}` : ipKeyGenerator(req.ip)),
   message: { error: 'Too many requests' }
 });

@@ -1,9 +1,13 @@
 import pool from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseLimit, parseCursor, toPage } from '../utils/pagination.js';
+import { sanitizeText } from '../utils/sanitize.js';
 
 export const NEUROTIPOS = ['TDAH', 'Autismo', 'Dislexia', 'Dispraxia', 'No diagnosticado', 'Prefiero no decir'];
 const FEED_COLUMNS = 'p.id, p.user_id, p.photo_url, p.description, p.age, p.location, p.neurotipo, p.created_at';
+
+// Texto libre: se limpia (control, HTML) antes de validar longitud y de guardar
+const clean = (value) => (typeof value === 'string' ? sanitizeText(value) : value);
 
 const toAge = (value) => {
   const n = Number(value);
@@ -23,7 +27,9 @@ const validateProfile = ({ description, age, location, neurotipo }, { partial = 
 
 export const createProfile = async (req, res) => {
   try {
-    const { description, age, location, neurotipo } = req.body ?? {};
+    const { age, neurotipo } = req.body ?? {};
+    const description = clean(req.body?.description);
+    const location = clean(req.body?.location);
     const userId = req.user.id;
 
     const error = validateProfile({ description, age, location, neurotipo });
@@ -47,7 +53,9 @@ export const createProfile = async (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-    const { description, age, location, neurotipo, photo_url } = req.body ?? {};
+    const { age, neurotipo, photo_url } = req.body ?? {};
+    const description = clean(req.body?.description);
+    const location = clean(req.body?.location);
     const userId = req.user.id;
 
     const error = validateProfile({ description, age, location, neurotipo }, { partial: true });
@@ -92,6 +100,7 @@ export const updateProfile = async (req, res) => {
 export const getProfile = async (req, res) => {
   try {
     const { userId } = req.params;
+    if (!/^\d{1,18}$/.test(userId)) return res.status(404).json({ error: 'Profile not found' });
 
     const result = await pool.query(
       'SELECT id, user_id, photo_url, description, age, location, neurotipo, created_at FROM profiles WHERE user_id = $1',
@@ -123,7 +132,8 @@ export const getFeed = async (req, res) => {
       return res.status(400).json({ error: 'Age filter must be 18-120' });
     }
     if (neurotipo && !NEUROTIPOS.includes(neurotipo)) return res.status(400).json({ error: 'Invalid neurotipo' });
-    if (location && (typeof location !== 'string' || location.length > 100)) {
+    const cleanLocation = clean(location);
+    if (cleanLocation && (typeof cleanLocation !== 'string' || cleanLocation.length > 100)) {
       return res.status(400).json({ error: 'Invalid location' });
     }
 
@@ -141,7 +151,7 @@ export const getFeed = async (req, res) => {
     if (cursor) add('p.id < ?', cursor);
     if (age_min) add('p.age >= ?', toAge(age_min));
     if (age_max) add('p.age <= ?', toAge(age_max));
-    if (location) add('p.location = ?', location);
+    if (cleanLocation) add('p.location = ?', cleanLocation);
     if (neurotipo) add('p.neurotipo = ?', neurotipo);
 
     values.push(limit + 1);
