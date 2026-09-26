@@ -6,21 +6,33 @@ import toast from 'react-hot-toast';
 export default function MatchesList() {
   const navigate = useNavigate();
   const [matches, setMatches] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     fetchMatches();
   }, []);
 
-  const fetchMatches = async () => {
+  // Paginado por cursor: 10 matches por petición, "Ver más" pide la siguiente página
+  const fetchMatches = async (cursor = null) => {
     try {
-      const res = await client.get('/api/swipes/matches');
-      setMatches(res.data);
+      const params = new URLSearchParams({ limit: 10 });
+      if (cursor) params.append('cursor', cursor);
+      const res = await client.get(`/api/swipes/matches?${params}`);
+      setMatches((prev) => (cursor ? [...prev, ...res.data.data] : res.data.data));
+      setNextCursor(res.data.next_cursor);
     } catch (err) {
       toast.error('Error loading matches');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
+  };
+
+  const loadMore = () => {
+    setLoadingMore(true);
+    fetchMatches(nextCursor);
   };
 
   if (loading) {
@@ -71,6 +83,16 @@ export default function MatchesList() {
             </div>
           ))}
         </div>
+
+        {nextCursor && (
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="mt-6 w-full bg-white border py-3 rounded-lg font-semibold hover:bg-gray-100 disabled:opacity-50"
+          >
+            {loadingMore ? 'Cargando…' : 'Ver más'}
+          </button>
+        )}
       </div>
     </div>
   );

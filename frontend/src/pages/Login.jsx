@@ -42,7 +42,7 @@ export default function Login() {
   return (
     <form onSubmit={handleLogin} noValidate className="space-y-4">
       <div>
-        <h1 className="font-display text-3xl font-semibold sm:text-4xl tracking-tight [font-stretch:88%]">Vuelve a entrar</h1>
+        <h1 className="font-display text-4xl font-normal tracking-[-0.04em] [font-stretch:88%] sm:text-[2.75rem] sm:leading-[1.05]">Vuelve a entrar</h1>
         <p className="mt-2 text-mute">Por seguridad, tu sesión dura 1 hora.</p>
       </div>
 

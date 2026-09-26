@@ -2,8 +2,12 @@ import { useState, useEffect } from 'react';
 import client from '../api/client';
 import toast from 'react-hot-toast';
 
+const PAGE_SIZE = 10;
+const validAge = (v) => v && Number.isInteger(Number(v)) && Number(v) >= 18 && Number(v) <= 120;
+
 export default function ProfileFeed() {
   const [profiles, setProfiles] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
@@ -13,20 +17,28 @@ export default function ProfileFeed() {
     neurotipo: ''
   });
 
+  // Espera a que el usuario termine de escribir antes de pedir el feed
   useEffect(() => {
-    fetchFeed();
+    const timer = setTimeout(() => fetchFeed(), 400);
+    return () => clearTimeout(timer);
   }, [filters]);
 
-  const fetchFeed = async () => {
+  // Una página cada vez (cursor). Los perfiles ya valorados no vuelven, así que se reemplaza la
+  // página en lugar de acumular: la memoria del cliente no crece con el uso.
+  const fetchFeed = async (cursor = null) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ limit: PAGE_SIZE });
       Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value);
+        if (!value) return;
+        if ((key === 'age_min' || key === 'age_max') && !validAge(value)) return;
+        params.append(key, value);
       });
+      if (cursor) params.append('cursor', cursor);
 
       const res = await client.get(`/api/profiles/feed?${params}`);
-      setProfiles(res.data);
+      setProfiles(res.data.data);
+      setNextCursor(res.data.next_cursor);
       setCurrentIndex(0);
     } catch (err) {
       toast.error('Error loading profiles');
@@ -36,10 +48,7 @@ export default function ProfileFeed() {
   };
 
   const handleSwipe = async (action) => {
-    if (currentIndex >= profiles.length) {
-      toast.info('No más perfiles disponibles');
-      return;
-    }
+    if (currentIndex >= profiles.length) return;
 
     const profile = profiles[currentIndex];
 
@@ -56,10 +65,11 @@ export default function ProfileFeed() {
       }
 
       const nextIndex = currentIndex + 1;
-      if (nextIndex >= profiles.length) {
-        toast.info('Alcanzaste el final del feed');
+      if (nextIndex >= profiles.length && nextCursor) {
+        await fetchFeed(nextCursor);
+      } else {
+        setCurrentIndex(nextIndex);
       }
-      setCurrentIndex(nextIndex);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error en swipe');
     }
@@ -74,10 +84,10 @@ export default function ProfileFeed() {
       <div className="flex flex-col justify-center items-center min-h-screen space-y-4">
         <h2 className="text-2xl font-bold">No hay más perfiles</h2>
         <button
-          onClick={() => setCurrentIndex(0)}
+          onClick={() => fetchFeed()}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
         >
-          Reiniciar feed
+          Buscar de nuevo
         </button>
       </div>
     );

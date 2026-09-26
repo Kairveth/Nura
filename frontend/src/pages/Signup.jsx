@@ -48,7 +48,7 @@ export default function Signup() {
   return (
     <form onSubmit={handleSignup} noValidate className="space-y-4">
       <div>
-        <h1 className="font-display text-3xl font-semibold sm:text-4xl tracking-tight [font-stretch:88%]">Crea tu cuenta</h1>
+        <h1 className="font-display text-4xl font-normal tracking-[-0.04em] [font-stretch:88%] sm:text-[2.75rem] sm:leading-[1.05]">Crea tu cuenta</h1>
         <p className="mt-2 text-mute">Solo email y contraseña. El perfil lo haces después, a tu ritmo.</p>
       </div>
 
