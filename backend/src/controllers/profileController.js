@@ -1,10 +1,13 @@
 import pool from '../db.js';
 import { log } from '../utils/logger.js';
-import { parseLimit, parseCursor, toPage } from '../utils/pagination.js';
+import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js';
 import { sanitizeText } from '../utils/sanitize.js';
 
+// La API expone `neurotipo`; en la BD la columna es `neurodivergence_type`.
 export const NEUROTIPOS = ['TDAH', 'Autismo', 'Dislexia', 'Dispraxia', 'No diagnosticado', 'Prefiero no decir'];
-const FEED_COLUMNS = 'p.id, p.user_id, p.photo_url, p.description, p.age, p.location, p.neurotipo, p.created_at';
+const COLUMNS = 'id, user_id, photo_url, description, age, location, neurodivergence_type AS neurotipo, created_at';
+const FEED_COLUMNS = `p.id, p.user_id, p.photo_url, p.description, p.age, p.location,
+  p.neurodivergence_type AS neurotipo, p.created_at, p.created_at::text AS cursor_ts`;
 
 // Texto libre: se limpia (control, HTML) antes de validar longitud y de guardar
 const clean = (value) => (typeof value === 'string' ? sanitizeText(value) : value);
@@ -36,7 +39,8 @@ export const createProfile = async (req, res) => {
     if (error) return res.status(400).json({ error });
 
     const result = await pool.query(
-      'INSERT INTO profiles (user_id, description, age, location, neurotipo) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      `INSERT INTO profiles (user_id, description, age, location, neurodivergence_type)
+       VALUES ($1, $2, $3, $4, $5) RETURNING ${COLUMNS}`,
       [userId, description, toAge(age), location, neurotipo]
     );
 
@@ -64,7 +68,7 @@ export const updateProfile = async (req, res) => {
       return res.status(400).json({ error: 'Invalid photo_url' });
     }
 
-    const updates = [];
+    const updates = ['updated_at = NOW()'];
     const values = [userId];
     const set = (column, value) => {
       values.push(value);
@@ -74,15 +78,15 @@ export const updateProfile = async (req, res) => {
     if (description !== undefined) set('description', description);
     if (age !== undefined) set('age', toAge(age));
     if (location !== undefined) set('location', location);
-    if (neurotipo !== undefined) set('neurotipo', neurotipo);
+    if (neurotipo !== undefined) set('neurodivergence_type', neurotipo);
     if (photo_url !== undefined) set('photo_url', photo_url);
 
-    if (updates.length === 0) {
+    if (updates.length === 1) {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
     const result = await pool.query(
-      `UPDATE profiles SET ${updates.join(', ')} WHERE user_id = $1 RETURNING *`,
+      `UPDATE profiles SET ${updates.join(', ')} WHERE user_id = $1 RETURNING ${COLUMNS}`,
       values
     );
 
@@ -100,12 +104,9 @@ export const updateProfile = async (req, res) => {
 export const getProfile = async (req, res) => {
   try {
     const { userId } = req.params;
-    if (!/^\d{1,18}$/.test(userId)) return res.status(404).json({ error: 'Profile not found' });
+    if (!isUuid(userId)) return res.status(404).json({ error: 'Profile not found' });
 
-    const result = await pool.query(
-      'SELECT id, user_id, photo_url, description, age, location, neurotipo, created_at FROM profiles WHERE user_id = $1',
-      [userId]
-    );
+    const result = await pool.query(`SELECT ${COLUMNS} FROM profiles WHERE user_id = $1`, [userId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Profile not found' });
@@ -118,8 +119,8 @@ export const getProfile = async (req, res) => {
   }
 };
 
-// GET /api/profiles/feed?limit=10&cursor=<id>&age_min=&age_max=&location=&neurotipo=
-// Respuesta: { data: [...], next_cursor: "<id>" | null }
+// GET /api/profiles/feed?limit=10&cursor=<opaco>&age_min=&age_max=&location=&neurotipo=
+// Respuesta: { data: [...], next_cursor: "<opaco>" | null }
 export const getFeed = async (req, res) => {
   try {
     const { age_min, age_max, location, neurotipo } = req.query;
@@ -140,23 +141,27 @@ export const getFeed = async (req, res) => {
     const values = [userId];
     const where = [
       'p.user_id <> $1',
-      // NOT EXISTS aprovecha el índice único de swipes (swiper_id, swiped_id); NOT IN no escala
-      'NOT EXISTS (SELECT 1 FROM swipes s WHERE s.swiper_id = $1 AND s.swiped_id = p.user_id)'
+      // NOT EXISTS aprovecha el índice único de swipes (from_user_id, to_user_id); NOT IN no escala
+      'NOT EXISTS (SELECT 1 FROM swipes s WHERE s.from_user_id = $1 AND s.to_user_id = p.user_id)'
     ];
-    const add = (clause, value) => {
-      values.push(value);
-      where.push(clause.replace('?', `$${values.length}`));
+    const add = (clause, ...params) => {
+      let i = values.length;
+      values.push(...params);
+      where.push(clause.replace(/\?/g, () => `$${++i}`));
     };
 
-    if (cursor) add('p.id < ?', cursor);
+    if (cursor) add('(p.created_at, p.id) < (?::timestamp, ?::uuid)', cursor.ts, cursor.id);
     if (age_min) add('p.age >= ?', toAge(age_min));
     if (age_max) add('p.age <= ?', toAge(age_max));
     if (cleanLocation) add('p.location = ?', cleanLocation);
-    if (neurotipo) add('p.neurotipo = ?', neurotipo);
+    if (neurotipo) add('p.neurodivergence_type = ?', neurotipo);
 
     values.push(limit + 1);
     const result = await pool.query(
-      `SELECT ${FEED_COLUMNS} FROM profiles p WHERE ${where.join(' AND ')} ORDER BY p.id DESC LIMIT $${values.length}`,
+      `SELECT ${FEED_COLUMNS} FROM profiles p
+       WHERE ${where.join(' AND ')}
+       ORDER BY p.created_at DESC, p.id DESC
+       LIMIT $${values.length}`,
       values
     );
 

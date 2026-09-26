@@ -15,7 +15,7 @@ router.post('/', authMiddleware, userLimiter, createProfile);
 router.put('/', authMiddleware, userLimiter, updateProfile);
 router.get('/feed', authMiddleware, userLimiter, getFeed);
 
-// Perfil por id: requiere sesión (los ids son secuenciales y una ruta pública permitiría rastrearlos)
+// Perfil por id: requiere sesión (una ruta pública permitiría rastrear perfiles)
 router.get('/:userId', authMiddleware, userLimiter, getProfile);
 
 export default router;
