@@ -9,7 +9,7 @@ import authRoutes from './routes/auth.js';
 import profileRoutes from './routes/profile.js';
 import swipeRoutes from './routes/swipe.js';
 
-const required = ['JWT_SECRET', 'DATABASE_URL'];
+const required = ['JWT_SECRET', 'DATABASE_URL', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY'];
 if (process.env.NODE_ENV === 'production') required.push('FRONTEND_URL'); // CORS estricto: sin origen no se arranca
 for (const name of required) {
   if (!process.env[name]) {

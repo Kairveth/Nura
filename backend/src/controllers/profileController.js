@@ -2,6 +2,9 @@ import pool from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js';
 import { sanitizeText } from '../utils/sanitize.js';
+import { sniffImageMime, replaceProfilePhoto } from '../utils/storage.js';
+
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
 // La API expone `neurotipo`; en la BD la columna es `neurodivergence_type`.
 export const NEUROTIPOS = ['TDAH', 'Autismo', 'Dislexia', 'Dispraxia', 'No diagnosticado', 'Prefiero no decir'];
@@ -30,18 +33,21 @@ const validateProfile = ({ description, age, location, neurotipo }, { partial = 
 
 export const createProfile = async (req, res) => {
   try {
-    const { age, neurotipo } = req.body ?? {};
+    const { age, neurotipo, photo_url } = req.body ?? {};
     const description = clean(req.body?.description);
     const location = clean(req.body?.location);
     const userId = req.user.id;
 
     const error = validateProfile({ description, age, location, neurotipo });
     if (error) return res.status(400).json({ error });
+    if (photo_url !== undefined && (typeof photo_url !== 'string' || photo_url.length > 500)) {
+      return res.status(400).json({ error: 'Invalid photo_url' });
+    }
 
     const result = await pool.query(
-      `INSERT INTO profiles (user_id, description, age, location, neurodivergence_type)
-       VALUES ($1, $2, $3, $4, $5) RETURNING ${COLUMNS}`,
-      [userId, description, toAge(age), location, neurotipo]
+      `INSERT INTO profiles (user_id, description, age, location, neurodivergence_type, photo_url)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COLUMNS}`,
+      [userId, description, toAge(age), location, neurotipo, photo_url ?? null]
     );
 
     res.status(201).json(result.rows[0]);
@@ -98,6 +104,27 @@ export const updateProfile = async (req, res) => {
   } catch (err) {
     log('ERROR', 'update profile failed', { code: err.code, message: err.message });
     res.status(500).json({ error: 'Failed to update profile' });
+  }
+};
+
+// POST /api/profiles/photo (multipart/form-data, campo "photo"). Devuelve { photo_url }; el cliente
+// la incluye al crear o editar su perfil (aquí no se toca la BD, solo el almacenamiento de objetos).
+export const uploadPhoto = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Photo required' });
+    if (req.file.size > MAX_PHOTO_BYTES) return res.status(400).json({ error: 'Photo must be 5MB or less' });
+
+    // No fiarse del mimetype que manda el navegador: se comprueba la cabecera real del fichero
+    const mime = sniffImageMime(req.file.buffer);
+    if (!mime) return res.status(400).json({ error: 'Photo must be JPEG or PNG' });
+
+    const existing = await pool.query('SELECT photo_url FROM profiles WHERE user_id = $1', [req.user.id]);
+    const photo_url = await replaceProfilePhoto(req.user.id, req.file.buffer, mime, existing.rows[0]?.photo_url);
+
+    res.status(201).json({ photo_url });
+  } catch (err) {
+    log('ERROR', 'upload photo failed', { message: err.message });
+    res.status(500).json({ error: 'Failed to upload photo' });
   }
 };
 
