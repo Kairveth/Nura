@@ -19,7 +19,8 @@ cd frontend && npm run build                     # debe compilar sin errores
 ```
 
 - Gestor oficial: **npm** (lockfiles `package-lock.json`). Bun está instalado en la máquina pero **no** se usa en el proyecto: no generes `bun.lock` ni mezcles gestores.
-- **El esquema real de la BD es la fuente de verdad** (ids UUID; nombres distintos a los de la especificación). Está descrito en `migrations/000_baseline_schema.sql` (local, no versionada); la API mantiene su contrato (`neurotipo`, `action`). Antes de escribir SQL, comprueba las columnas reales. Las migraciones `003` (índices) y `004` (seguridad de `users`) ya están aplicadas; una BD nueva las necesita para que el login funcione.
+- **El esquema real de la BD es la fuente de verdad** (ids UUID; nombres distintos a los de la especificación). Está descrito en `migrations/000_baseline_schema.sql` (local, no versionada); la API mantiene su contrato (`neurotipos` como array, `action`). Antes de escribir SQL, comprueba las columnas reales. Las migraciones locales (`003` a `009`) ya están aplicadas; una BD nueva las necesita todas, en orden, para que la app funcione.
+- **La lista de `NEUROTIPOS` está duplicada** en `backend/src/controllers/profileController.js`, `frontend/src/pages/ProfileCreate.jsx` y `frontend/src/pages/ProfileFeed.jsx` (no hay código compartido entre backend y frontend). Si añades o quitas una etiqueta, cámbiala en los tres, letra a letra.
 - Entorno: copia `backend/.env.example` → `backend/.env` y `frontend/.env.example` → `frontend/.env.local`. El backend no arranca sin `JWT_SECRET` y `DATABASE_URL`.
 
 ## 3. Estructura y dónde va cada cosa
@@ -79,7 +80,7 @@ Sigue `Design_System.md`. Resumen:
 - Foco visible, teclado completo, contraste AA, `prefers-reduced-motion`, objetivos táctiles ≥ 44 px, inputs de 16 px.
 - **Toda pantalla autenticada nueva va bajo `AppShell`** (la barra inferior fija), nunca con su propio header/logo. Misma navegación en todas partes = predecible. Única excepción hasta ahora: `Chat.jsx` (una conversación necesita el alto completo); cualquier otra excepción se justifica igual de explícitamente, no por comodidad.
 - **Nunca un enlace o botón que lleve a una función que no existe.** Si algo no está construido (como el chat), dilo con un estado deshabilitado y honesto ("disponible pronto"), no con un clic que no lleva a ningún sitio.
-- **Sin porcentajes ni puntuaciones de compatibilidad.** Solo hechos literales que el usuario pueda verificar (mismo neurotipo, misma ciudad…). Nada que huela a algoritmo de recomendación oculto.
+- **Sin porcentajes ni puntuaciones de compatibilidad.** Solo hechos literales que el usuario pueda verificar (etiquetas de neurotipo en común, misma ciudad…). Nada que huela a algoritmo de recomendación oculto.
 - Copy en español, literal, voz activa. Errores: qué pasó + cómo arreglarlo. Sin urgencia, sin sarcasmo, sin prometer nada fuera del MVP.
 
 ## 7. Flujo de trabajo por tipo de tarea

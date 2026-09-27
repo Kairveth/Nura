@@ -83,7 +83,7 @@ Las rutas autenticadas añaden `authMiddleware` (JWT + `token_version`) y `userL
 Toda lista se pagina por **cursor (keyset)**, nunca con `OFFSET`:
 
 ```
-GET /api/profiles/feed?limit=10&cursor=<id>&age_min=&age_max=&location=&neurotipo=
+GET /api/profiles/feed?limit=10&cursor=<id>&age_min=&age_max=&location=&neurotipos=TDAH&neurotipos=TEA
 GET /api/swipes/matches?limit=10&cursor=<id>
 → 200 { "data": [ ... ], "next_cursor": "<id>" | null }
 ```
@@ -91,7 +91,7 @@ GET /api/swipes/matches?limit=10&cursor=<id>
 - Los ids son **UUID** (sin orden cronológico): el orden fijo es `created_at DESC, id DESC` y el cursor es **opaco** (codifica `created_at` con microsegundos y el `id` de la última fila). `next_cursor: null` = no hay más.
 - `limit`: por defecto 10, **máximo 20** (`utils/pagination.js`). Cursor inválido → 400.
 - El servidor pide `limit + 1` filas para saber si hay siguiente página sin `COUNT(*)`.
-- Filtros validados: edad 18–120, `neurotipo` de una lista cerrada, `location` ≤ 100 caracteres.
+- Filtros validados: edad 18–120, `neurotipos` (repetible en la query string) de una lista cerrada — el feed muestra a quien comparta **al menos una** (`&&`, solape de arrays, no igualdad), `location` ≤ 100 caracteres.
 
 **Pendiente:** exportación y borrado de cuenta (GDPR), verificación de email.
 
@@ -133,7 +133,9 @@ PostgreSQL con `users`, `profiles`, `swipes`, `matches` y `messages` (esta últi
 
 **Índices** (migración local `003`, aplicada): el orden base `(created_at DESC, id DESC)` y cada filtro del feed (tipo, ubicación) combinado con ese orden, más edad; en `matches`, por usuario y orden; en `messages`, por match y orden (chat). Se eliminaron los redundantes que ya cubren las restricciones `UNIQUE`. Comprobar con `EXPLAIN ANALYZE`.
 
-**Match mutuo:** no hay trigger en la BD. `POST /api/swipes` lo crea dentro de una **transacción con bloqueo por pareja** (`pg_advisory_xact_lock`): si dos personas se dan "sí" a la vez, la segunda espera a la primera y no se pierde ningún match ni se duplica. La pareja se guarda en orden canónico (id menor primero). La API expone `neurotipo` aunque la columna se llame distinto.
+**Match mutuo:** no hay trigger en la BD. `POST /api/swipes` lo crea dentro de una **transacción con bloqueo por pareja** (`pg_advisory_xact_lock`): si dos personas se dan "sí" a la vez, la segunda espera a la primera y no se pierde ningún match ni se duplica. La pareja se guarda en orden canónico (id menor primero). La API expone `neurotipos` (array) aunque la columna se llame distinto (`neurodivergence_types`).
+
+**Neurotipo, de una opción a varias (migración `009`):** alguien puede ser TDAH + TEA + AACC sin diagnóstico formal a la vez, y hay usuarios neurotípicos en Nura, no solo diagnosticados. `neurodivergence_types` es un `text[]` (antes `varchar` escalar), con índice `GIN` para el filtro por solape. Lista cerrada de 13 etiquetas en `NEUROTIPOS` (`profileController.js`) — incluye "Neurotípico" y "Sin diagnóstico formal" como una etiqueta más, no un campo aparte. Máximo 6 etiquetas por perfil (más deja de informar). La lista está **duplicada literalmente** en `ProfileCreate.jsx` y `ProfileFeed.jsx` (sin backend/frontend compartido): cualquier cambio va en los tres sitios a la vez.
 
 ### Variables de entorno
 
@@ -182,7 +184,7 @@ inexistente, ya usado o caducado.
 
 - **Rutas:** un único `<BrowserRouter>` con dos ramas protegidas por layout (`RequireAuth`, `RedirectIfAuthed`), no dos árboles de router condicionales. Sin sesión → `/` (registro) y `/login` bajo `AuthLayout`; con sesión → `/dashboard`, `/profile/create`, `/feed`, `/matches`, todas bajo `AppShell`.
 - **Navegación autenticada (`AppShell.jsx`):** una barra inferior fija con 4 pestañas (Inicio, Descubrir, Matches, Perfil), igual en las cuatro pantallas y con el mismo lenguaje visual (subrayado en `nura`) que el selector de Crear cuenta/Entrar de `AuthLayout`. Nada de menús que aparecen y desaparecen: "dónde estoy" se ve siempre igual.
-- **Señales de compatibilidad (`ProfileFeed.jsx`):** calculadas en el cliente comparando el propio perfil con cada tarjeta (mismo neurotipo, misma ubicación, edad parecida ≤3 años). Se muestran como hechos literales, nunca como una puntuación o un porcentaje; no hay backend ni algoritmo de recomendación detrás.
+- **Señales de compatibilidad (`ProfileFeed.jsx`):** calculadas en el cliente comparando el propio perfil con cada tarjeta (etiquetas de neurotipo en común —cualquier solape, no las mismas exactas—, misma ubicación, edad parecida ≤3 años). Se muestran como hechos literales, nunca como una puntuación o un porcentaje; no hay backend ni algoritmo de recomendación detrás.
 - **Chat (`Chat.jsx`, ruta `/matches/:matchId`):** deliberadamente fuera de `AppShell` (excepción, igual que `AuthLayout`): una conversación necesita el alto completo, no compartir la franja fija con la barra de navegación. Carga el match por `GET /api/swipes/matches/:matchId` (funciona también al recargar o entrar por enlace directo, no solo navegando desde la lista), hace polling cada 2 s solo con la pestaña visible, marca como leído al abrir y muestra el aviso de US-010 una vez superados 5 mensajes (se recuerda cerrado en `localStorage`, por match).
 - **A dónde va tras iniciar sesión:** lo decide solo `RedirectIfAuthed` (según `isAuthenticated` + `justSignedUp` del store). Ningún componente llama a `navigate()` justo después de `setAuth(...)`: hacerlo competía con esa redirección reactiva y a veces un registro nuevo acababa en `/dashboard` en vez de `/profile/create` (bug real, corregido; ver comentarios en `App.jsx` y `authStore.js`).
 - **Estado:** `authStore` (Zustand) guarda `user`, `token`, `isAuthenticated`, `justSignedUp`. Hoy vive en memoria: recargar la página cierra la sesión.
