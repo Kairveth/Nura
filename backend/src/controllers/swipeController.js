@@ -97,7 +97,11 @@ export const getMatches = async (req, res) => {
 
     const result = await pool.query(
       `SELECT m.id, m.created_at, m.created_at::text AS cursor_ts, p.user_id AS matched_user_id,
-              p.photo_url, p.description, p.age, p.location, p.neurodivergence_type AS neurotipo
+              p.photo_url, p.description, p.age, p.location, p.neurodivergence_type AS neurotipo,
+              (SELECT count(*)::int FROM messages msg
+               WHERE msg.match_id = m.id AND msg.sender_id <> $1
+                 AND msg.created_at > COALESCE(CASE WHEN m.user_1_id = $1 THEN m.user_1_last_read_at ELSE m.user_2_last_read_at END, '-infinity')
+              ) AS unread_count
        FROM matches m
        JOIN profiles p ON p.user_id = CASE WHEN m.user_1_id = $1 THEN m.user_2_id ELSE m.user_1_id END
        WHERE (m.user_1_id = $1 OR m.user_2_id = $1) ${cursorClause}
@@ -110,5 +114,29 @@ export const getMatches = async (req, res) => {
   } catch (err) {
     log('ERROR', 'get matches failed', { code: err.code, message: err.message });
     res.status(500).json({ error: 'Failed to fetch matches' });
+  }
+};
+
+// GET /api/swipes/matches/:matchId — un match suelto, para abrir el chat directo por enlace o al
+// recargar (la lista ya trae lo mismo, pero no siempre está en la página cargada en el cliente).
+export const getMatch = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    if (!isUuid(req.params.matchId)) return res.status(404).json({ error: 'Match not found' });
+
+    const { rows } = await pool.query(
+      `SELECT m.id, m.created_at, p.user_id AS matched_user_id,
+              p.photo_url, p.description, p.age, p.location, p.neurodivergence_type AS neurotipo
+       FROM matches m
+       JOIN profiles p ON p.user_id = CASE WHEN m.user_1_id = $1 THEN m.user_2_id ELSE m.user_1_id END
+       WHERE m.id = $2 AND (m.user_1_id = $1 OR m.user_2_id = $1)`,
+      [userId, req.params.matchId]
+    );
+
+    if (!rows[0]) return res.status(404).json({ error: 'Match not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    log('ERROR', 'get match failed', { code: err.code, message: err.message });
+    res.status(500).json({ error: 'Failed to fetch match' });
   }
 };

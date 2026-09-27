@@ -41,3 +41,12 @@ export const passwordResetLimiter = limiter({
   max: 3,
   message: { error: 'Too many requests' }
 });
+
+// Enviar mensajes: 10 / min por usuario (checklist de seguridad, punto 5). Aparte del límite general
+// de userLimiter, que ya cubre la lectura por polling (2s = 30 peticiones/min, dentro de su cupo).
+export const messageLimiter = limiter({
+  windowMs: 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => (req.user ? `u:${req.user.id}` : ipKeyGenerator(req.ip)),
+  message: { error: 'Too many messages' }
+});
