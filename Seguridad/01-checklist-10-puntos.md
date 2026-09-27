@@ -38,7 +38,7 @@
 
 - [ ] Auth endpoints: 5 req / 15 min per IP
 - [ ] API general: 100 req / min per user
-- [ ] Chat: 10 msgs / min per user
+- [x] Chat: 10 msgs / min per user (`messageLimiter`, backend/src/middleware/rateLimiter.js)
 
 **Test:** enviar 200 requests en 1s = 429 Too Many Requests
 

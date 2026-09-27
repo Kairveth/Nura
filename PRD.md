@@ -70,10 +70,10 @@ Ids según `Especificacion/03-user-stories.md`.
 | US-005 | Ver otros perfiles | Foto, descripción, edad y tipo legibles | Hecho, un perfil a la vez |
 | US-006 | Filtrar | Edad, ubicación, tipo; sin filtro = todos | Hecho, panel de filtros plegado por defecto |
 | US-007 | Swipe sí/no | Botones grandes, literal ("Pasar" / "Me interesa") | Hecho, con tope de 15 al día |
-| US-008 | Ver matches | Lista; clic abre el chat | Lista hecha; el chat en sí es US-009, aún no existe (el botón lo dice: "disponible pronto") |
-| US-009 | Chat 1:1 | Historial, mensajes en 0–3 s (polling 2 s) | Pendiente |
-| US-010 | Recomendación de quedar | Banner discreto, una sola vez, se puede cerrar | Pendiente |
-| US-011 | Indicador de mensajes nuevos | Badge que desaparece al leer | Pendiente |
+| US-008 | Ver matches | Lista; clic abre el chat | Hecho |
+| US-009 | Chat 1:1 | Historial, mensajes en 0–3 s (polling 2 s) | Hecho |
+| US-010 | Recomendación de quedar | Banner discreto, una sola vez, se puede cerrar | Hecho (a partir de 5 mensajes) |
+| US-011 | Indicador de mensajes nuevos | Badge que desaparece al leer | Hecho |
 | US-012 | Borrar mi cuenta | Doble confirmación, borrado en cascada | Pendiente |
 | — | Olvidé mi contraseña | Email con enlace de un solo uso, caduca en 30 min | Hecho (Resend, dominio de pruebas) |
 | US-013 | Descargar mis datos | JSON con perfil, chats y matches | Pendiente |

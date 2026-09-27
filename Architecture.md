@@ -72,6 +72,10 @@ Las rutas autenticadas añaden `authMiddleware` (JWT + `token_version`) y `userL
 | POST | `/api/auth/reset-password` | — (rate limit 3/h) | Token de un solo uso (hash en BD), 30 min |
 | POST | `/api/swipes` | JWT | Registra sí/no; el match se crea en BD si es mutuo |
 | GET | `/api/swipes/matches` | JWT | Matches del usuario con los datos del otro. **Paginado por cursor** |
+| GET | `/api/swipes/matches/:matchId` | JWT | Un match suelto (recarga o enlace directo al chat) |
+| GET | `/api/matches/:matchId/messages` | JWT | Historial del chat. **Paginado por cursor** |
+| POST | `/api/matches/:matchId/messages` | JWT (10/min) | Envía un mensaje (2000 car. máx.) |
+| POST | `/api/matches/:matchId/read` | JWT | Marca el chat como leído (baja el badge) |
 | GET | `/health` | — | Comprobación de vida |
 
 ### Paginación (contrato de las listas)
@@ -89,7 +93,21 @@ GET /api/swipes/matches?limit=10&cursor=<id>
 - El servidor pide `limit + 1` filas para saber si hay siguiente página sin `COUNT(*)`.
 - Filtros validados: edad 18–120, `neurotipo` de una lista cerrada, `location` ≤ 100 caracteres.
 
-**Pendiente:** mensajes (chat con polling), exportación y borrado de cuenta (GDPR), verificación de email.
+**Pendiente:** exportación y borrado de cuenta (GDPR), verificación de email.
+
+### Chat (`messageController.js`)
+
+Todo endpoint de chat empieza comprobando membresía (`loadMembership`): confirma que quien pide es
+de verdad `user_1_id` o `user_2_id` de ese match antes de leer o escribir nada. Si no lo es, o el
+match no existe, responde **404** en los dos casos por igual (no delata si el match existe).
+
+- Mensajes: se limpian con `sanitizeText` (igual que perfiles), máximo 2000 caracteres, límite de
+  10/min por usuario (`messageLimiter`; el checklist de seguridad ya pedía ese número).
+- Sin leído/no leído por mensaje individual: cada match guarda cuándo lo leyó por última vez cada
+  lado (`user_1_last_read_at` / `user_2_last_read_at`, migración `008`). El badge de `getMatches` es
+  un `count(*)` de mensajes del otro posteriores a esa fecha; `NULL` = nunca lo abrió, cuentan todos.
+- Sin WebSocket: el frontend hace polling cada 2 s mientras la pestaña está visible
+  (`!document.hidden`), tal y como fija `CLAUDE.md`.
 
 ### Tope diario de swipes (calidad sobre cantidad)
 
@@ -165,7 +183,7 @@ inexistente, ya usado o caducado.
 - **Rutas:** un único `<BrowserRouter>` con dos ramas protegidas por layout (`RequireAuth`, `RedirectIfAuthed`), no dos árboles de router condicionales. Sin sesión → `/` (registro) y `/login` bajo `AuthLayout`; con sesión → `/dashboard`, `/profile/create`, `/feed`, `/matches`, todas bajo `AppShell`.
 - **Navegación autenticada (`AppShell.jsx`):** una barra inferior fija con 4 pestañas (Inicio, Descubrir, Matches, Perfil), igual en las cuatro pantallas y con el mismo lenguaje visual (subrayado en `nura`) que el selector de Crear cuenta/Entrar de `AuthLayout`. Nada de menús que aparecen y desaparecen: "dónde estoy" se ve siempre igual.
 - **Señales de compatibilidad (`ProfileFeed.jsx`):** calculadas en el cliente comparando el propio perfil con cada tarjeta (mismo neurotipo, misma ubicación, edad parecida ≤3 años). Se muestran como hechos literales, nunca como una puntuación o un porcentaje; no hay backend ni algoritmo de recomendación detrás.
-- **Matches sin chat:** la lista de matches es real, pero el chat (US-009) no existe todavía. El botón dice "Escribir (disponible pronto)" y está deshabilitado a propósito: mejor eso que un enlace que lleve a ningún sitio.
+- **Chat (`Chat.jsx`, ruta `/matches/:matchId`):** deliberadamente fuera de `AppShell` (excepción, igual que `AuthLayout`): una conversación necesita el alto completo, no compartir la franja fija con la barra de navegación. Carga el match por `GET /api/swipes/matches/:matchId` (funciona también al recargar o entrar por enlace directo, no solo navegando desde la lista), hace polling cada 2 s solo con la pestaña visible, marca como leído al abrir y muestra el aviso de US-010 una vez superados 5 mensajes (se recuerda cerrado en `localStorage`, por match).
 - **A dónde va tras iniciar sesión:** lo decide solo `RedirectIfAuthed` (según `isAuthenticated` + `justSignedUp` del store). Ningún componente llama a `navigate()` justo después de `setAuth(...)`: hacerlo competía con esa redirección reactiva y a veces un registro nuevo acababa en `/dashboard` en vez de `/profile/create` (bug real, corregido; ver comentarios en `App.jsx` y `authStore.js`).
 - **Estado:** `authStore` (Zustand) guarda `user`, `token`, `isAuthenticated`, `justSignedUp`. Hoy vive en memoria: recargar la página cierra la sesión.
 - **API:** `api/client.js` (axios) añade el token a cada petición; en desarrollo Vite hace proxy de `/api` a `localhost:3001`.

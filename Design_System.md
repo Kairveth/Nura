@@ -77,10 +77,13 @@ Etiqueta **siempre visible** encima (nunca solo placeholder), input de borde `li
 Escena con aura + formulario. Expone `setProgress(0–1)` por `Outlet context`: las páginas informan el avance y el aura se enfoca. En móvil la escena es una banda superior (`18dvh`, entre 112 y 192 px). El selector "Crear cuenta / Entrar" solo aparece en esas dos rutas; en recuperar/restablecer contraseña se oculta en vez de marcar una pestaña que no aplica.
 
 ### `AppShell` (`components/AppShell.jsx`)
-Navegación de toda la app autenticada: barra inferior fija, 4 pestañas con etiqueta de texto (nunca solo icono), mismo lenguaje visual de subrayado en `nura` que el selector de `AuthLayout`. Misma barra, en el mismo sitio, en las cuatro pantallas — nada de menús que aparecen y desaparecen.
+Navegación de toda la app autenticada: barra inferior fija, 4 pestañas con etiqueta de texto (nunca solo icono), mismo lenguaje visual de subrayado en `nura` que el selector de `AuthLayout`. Misma barra, en el mismo sitio, en todas las pantallas — nada de menús que aparecen y desaparecen. Excepción: `Chat` no la lleva, por el mismo motivo que `AuthLayout` tiene su propia escena (necesita el alto entero para la conversación).
 
 ### Tarjeta de perfil (`ProfileFeed.jsx`)
 Un perfil a la vez, nunca una pila. Foto arriba (`aspect-[4/5]`), datos y descripción completa debajo (sin recortar el texto). Sin sombra, borde `line`. Chips de compatibilidad: hechos literales (mismo neurotipo, misma ciudad, edad parecida), fondo `sage/15` con borde `sage` — nunca un porcentaje ni una puntuación.
+
+### Burbujas de chat (`Chat.jsx`)
+Propias a la derecha, relleno `nura` y texto blanco; del otro a la izquierda, borde `line` sobre blanco translúcido. Sin avatares repetidos en cada burbuja (ya está el nombre en la cabecera). El aviso de "considera quedar" (US-010) usa `sage`, igual que el banner de match del feed: mismo tono para "esto es bueno, tranquilo" en toda la app.
 
 ### Mensaje de error
 Zona `role="alert"` con `aria-live="polite"`, texto `alert` 600. Dice **qué pasó y cómo arreglarlo**, sin disculpas vagas.
