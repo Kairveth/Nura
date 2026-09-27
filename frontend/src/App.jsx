@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import ProfileCreate from './pages/ProfileCreate';
 import ProfileFeed from './pages/ProfileFeed';
 import MatchesList from './pages/MatchesList';
+import Chat from './pages/Chat';
 import './index.css';
 
 // Un único router para toda la app: dos árboles de <BrowserRouter> distintos según isAuthenticated
@@ -55,6 +56,9 @@ export default function App() {
             <Route path="/feed" element={<ProfileFeed />} />
             <Route path="/matches" element={<MatchesList />} />
           </Route>
+          {/* Sin AppShell a propósito: una conversación necesita el alto entero, no compartir la
+              franja inferior fija con la barra de navegación (excepción, igual que AuthLayout). */}
+          <Route path="/matches/:matchId" element={<Chat />} />
         </Route>
 
         <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/'} replace />} />

@@ -67,22 +67,26 @@ export default function MatchesList() {
                     <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-fog text-xs text-mute">Sin foto</div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-ink">
-                      {match.age} años{match.location ? ` · ${match.location}` : ''}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-ink">
+                        {match.age} años{match.location ? ` · ${match.location}` : ''}
+                      </p>
+                      {match.unread_count > 0 && (
+                        <span className="rounded-full bg-nura px-2 py-0.5 text-xs font-semibold text-white" aria-label={`${match.unread_count} mensajes sin leer`}>
+                          +{match.unread_count}
+                        </span>
+                      )}
+                    </div>
                     <p className="truncate text-sm text-mute">{match.description}</p>
                     <p className="mt-1 text-xs text-mute">Match del {dateFmt.format(new Date(match.created_at))}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  disabled
-                  aria-disabled="true"
-                  className="mt-3 h-10 w-full cursor-not-allowed rounded-2xl border border-line text-sm font-semibold text-mute"
-                  title="El chat llega en una próxima actualización"
+                <Link
+                  to={`/matches/${match.id}`}
+                  className="mt-3 block h-10 w-full rounded-2xl border border-line text-center text-sm font-semibold leading-10 text-ink transition-colors duration-200 hover:border-nura focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nura"
                 >
-                  Escribir (disponible pronto)
-                </button>
+                  Escribir
+                </Link>
               </li>
             ))}
           </ul>
