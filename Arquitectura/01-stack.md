@@ -7,7 +7,6 @@
 - **TailwindCSS** (accessible, built-in dark mode prep)
 - **axios** (HTTP client)
 - **zustand** (state, lightweight)
-- **react-hot-toast** (notifications, minimal)
 
 ## Backend
 - **Node.js + Express** (rápido, sencillo)
@@ -55,8 +54,7 @@
   "react": "^18",
   "tailwindcss": "^3",
   "axios": "^1",
-  "zustand": "^4",
-  "react-hot-toast": "^2"
+  "zustand": "^4"
 }
 ```
 

@@ -77,6 +77,9 @@ Sigue `Design_System.md`. Resumen:
 - **Un solo botón relleno por vista.** Sin tarjetas con sombra ni degradados en UI. Los inputs llevan borde y **etiqueta visible**.
 - Móvil primero; el formulario debe caber en 390×844 sin scroll.
 - Foco visible, teclado completo, contraste AA, `prefers-reduced-motion`, objetivos táctiles ≥ 44 px, inputs de 16 px.
+- **Toda pantalla autenticada nueva va bajo `AppShell`** (la barra inferior fija), nunca con su propio header/logo. Misma navegación en todas partes = predecible.
+- **Nunca un enlace o botón que lleve a una función que no existe.** Si algo no está construido (como el chat), dilo con un estado deshabilitado y honesto ("disponible pronto"), no con un clic que no lleva a ningún sitio.
+- **Sin porcentajes ni puntuaciones de compatibilidad.** Solo hechos literales que el usuario pueda verificar (mismo neurotipo, misma ciudad…). Nada que huela a algoritmo de recomendación oculto.
 - Copy en español, literal, voz activa. Errores: qué pasó + cómo arreglarlo. Sin urgencia, sin sarcasmo, sin prometer nada fuera del MVP.
 
 ## 7. Flujo de trabajo por tipo de tarea
@@ -109,7 +112,7 @@ Especificación cumplida ✓ · checklist de seguridad ✓ · build y pruebas ma
 1. Cerrar la **deuda de seguridad** pendiente (lista local, no versionada: `Seguridad/PENDIENTES.local.md`).
 2. ~~UI de perfil con foto y descripción~~ — hecho (`ProfileCreate`, sirve para crear y editar).
 3. ~~Olvidé mi contraseña~~ — hecho (Resend, dominio de pruebas: solo entrega a la cuenta dueña de la API key).
-4. UI de feed y swipe (`ProfileFeed`, `MatchesList`) — pocos perfiles por sesión, sin scroll infinito — US-005 a US-008.
+4. ~~UI de feed y swipe~~ — hecho (`ProfileFeed`, `MatchesList`, tope de 15 swipes/día, señales de compatibilidad literales).
 5. Chat 1:1 con polling de 2 s y recomendación de quedar — US-009 a US-011.
 6. Ajustes: exportar y borrar cuenta (GDPR) — US-012/013; verificación de email.
 7. Landing — US-014.

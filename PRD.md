@@ -36,6 +36,8 @@ Detalle en `Especificacion/02-user-personas.md`.
 4. **Intención sobre volumen.** Pocos perfiles por sesión, sin scroll infinito.
 5. **Autonomía.** El usuario marca su ritmo.
 
+**Diferencia deliberada frente a Tinder y apps similares:** un tope de 15 valoraciones al día (aplicado en el servidor, no solo en la interfaz), un perfil a la vez en vez de una pila, y señales de compatibilidad literales (mismo neurotipo, misma ubicación, edad parecida) en lugar de una puntuación o un porcentaje. El objetivo es menos matches pero más reales, no maximizar el tiempo en la app.
+
 ## 5. Alcance del MVP
 
 ### Entra
@@ -65,10 +67,10 @@ Ids según `Especificacion/03-user-stories.md`.
 | US-002 | Iniciar sesión | JWT 1 h, logout limpia sesión | Hecho (sesión en memoria, no persiste al recargar) |
 | US-003 | Crear perfil | 1 foto + 200 caracteres, vista previa | Hecho (foto en Supabase Storage) |
 | US-004 | Editar perfil | Cambios visibles al momento | Hecho (misma pantalla que US-003, detecta perfil existente) |
-| US-005 | Ver otros perfiles | Foto, descripción, edad y tipo legibles | API hecha; UI sin rediseñar |
-| US-006 | Filtrar | Edad, ubicación, tipo; sin filtro = todos | API hecha; UI pendiente |
-| US-007 | Swipe sí/no | Botones grandes, confirmación silenciosa | API hecha; UI sin rediseñar |
-| US-008 | Ver matches | Lista; clic abre el chat | API hecha; UI sin rediseñar |
+| US-005 | Ver otros perfiles | Foto, descripción, edad y tipo legibles | Hecho, un perfil a la vez |
+| US-006 | Filtrar | Edad, ubicación, tipo; sin filtro = todos | Hecho, panel de filtros plegado por defecto |
+| US-007 | Swipe sí/no | Botones grandes, literal ("Pasar" / "Me interesa") | Hecho, con tope de 15 al día |
+| US-008 | Ver matches | Lista; clic abre el chat | Lista hecha; el chat en sí es US-009, aún no existe (el botón lo dice: "disponible pronto") |
 | US-009 | Chat 1:1 | Historial, mensajes en 0–3 s (polling 2 s) | Pendiente |
 | US-010 | Recomendación de quedar | Banner discreto, una sola vez, se puede cerrar | Pendiente |
 | US-011 | Indicador de mensajes nuevos | Badge que desaparece al leer | Pendiente |

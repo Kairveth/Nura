@@ -62,7 +62,10 @@ Escala usada: título de formulario 36 px (móvil) → 44 px (`sm`+); titular de
 ## 7. Componentes
 
 ### Botón principal
-Relleno `nura`, texto blanco 600, `rounded-2xl`, 48/56 px de alto, ancho completo en formularios. Hover `nura-deep`, `active:scale-[0.98]`, deshabilitado a 40 % de opacidad con cursor `not-allowed`. Foco: contorno de 2 px `nura` con desplazamiento de 4 px. **Solo uno por vista.**
+Relleno `nura`, texto blanco 600, `rounded-2xl`, 48/56 px de alto, ancho completo en formularios. Hover `nura-deep`, `active:scale-[0.98]`, deshabilitado a 40 % de opacidad con cursor `not-allowed`. Foco: contorno de 2 px `nura` con desplazamiento de 4 px. **Solo uno por vista** en formularios. Excepción: una elección binaria genuina (el swipe "Pasar" / "Me interesa") son dos botones del mismo tamaño, uno con borde y uno relleno — no dos rellenos, y sin código de color rojo/verde (los rótulos ya son literales).
+
+### Botón deshabilitado y honesto
+Cuando algo no está construido todavía (el chat de un match, por ejemplo), el control existe pero está deshabilitado de verdad (`disabled`, cursor `not-allowed`, borde `line`) y dice cuándo llegará ("disponible pronto"). Nunca un enlace o clic que no lleve a ningún sitio.
 
 ### Enlace de texto (acción secundaria)
 Sin contenedor. `mute` por defecto, `ink` al pasar el ratón. El activo lleva subrayado de 2 px en `nura`. Zona táctil ≥ 44 px. Ejemplos: selector "Crear cuenta / Entrar", "Mostrar / Ocultar" contraseña.
@@ -71,7 +74,13 @@ Sin contenedor. `mute` por defecto, `ink` al pasar el ratón. El activo lleva su
 Etiqueta **siempre visible** encima (nunca solo placeholder), input de borde `line`, fondo blanco translúcido, `rounded-2xl`. Foco: borde `nura` + anillo `nura/20`. Error: borde `alert`. Ayuda opcional debajo (`mute`, 14 px). Si es de contraseña, incluye botón "Mostrar/Ocultar".
 
 ### `AuthLayout` (`components/AuthLayout.jsx`)
-Escena con aura + formulario. Expone `setProgress(0–1)` por `Outlet context`: las páginas informan el avance y el aura se enfoca. En móvil la escena es una banda superior (`18dvh`, entre 112 y 192 px).
+Escena con aura + formulario. Expone `setProgress(0–1)` por `Outlet context`: las páginas informan el avance y el aura se enfoca. En móvil la escena es una banda superior (`18dvh`, entre 112 y 192 px). El selector "Crear cuenta / Entrar" solo aparece en esas dos rutas; en recuperar/restablecer contraseña se oculta en vez de marcar una pestaña que no aplica.
+
+### `AppShell` (`components/AppShell.jsx`)
+Navegación de toda la app autenticada: barra inferior fija, 4 pestañas con etiqueta de texto (nunca solo icono), mismo lenguaje visual de subrayado en `nura` que el selector de `AuthLayout`. Misma barra, en el mismo sitio, en las cuatro pantallas — nada de menús que aparecen y desaparecen.
+
+### Tarjeta de perfil (`ProfileFeed.jsx`)
+Un perfil a la vez, nunca una pila. Foto arriba (`aspect-[4/5]`), datos y descripción completa debajo (sin recortar el texto). Sin sombra, borde `line`. Chips de compatibilidad: hechos literales (mismo neurotipo, misma ciudad, edad parecida), fondo `sage/15` con borde `sage` — nunca un porcentaje ni una puntuación.
 
 ### Mensaje de error
 Zona `role="alert"` con `aria-live="polite"`, texto `alert` 600. Dice **qué pasó y cómo arreglarlo**, sin disculpas vagas.

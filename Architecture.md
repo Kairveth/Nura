@@ -91,6 +91,15 @@ GET /api/swipes/matches?limit=10&cursor=<id>
 
 **Pendiente:** mensajes (chat con polling), exportación y borrado de cuenta (GDPR), verificación de email.
 
+### Tope diario de swipes (calidad sobre cantidad)
+
+`DAILY_SWIPE_LIMIT = 15` (`swipeController.js`). `createSwipe` cuenta los swipes de hoy del usuario
+(`countSwipesToday`, índice `idx_swipes_from_user_created`) **antes** de insertar; al llegar al tope
+responde `429 { error: 'Daily swipe limit reached', limit }` y no guarda nada. `getFeed` y la
+respuesta de `createSwipe` incluyen `swipes_today` y `daily_limit` para que el frontend muestre el
+contador sin pedirlo aparte. Es una decisión de producto (menos, pero con más atención), no un límite
+técnico: por eso se aplica en el servidor y no solo en la interfaz, para que no se pueda saltar.
+
 ### Autenticación
 
 - Registro: valida tipo, formato de email y contraseña (8–72 bytes); normaliza el email a minúsculas; hash con `bcryptjs` (10 rondas).
@@ -153,7 +162,10 @@ inexistente, ya usado o caducado.
 
 ## 4. Frontend
 
-- **Rutas:** un único `<BrowserRouter>` con dos ramas protegidas por layout (`RequireAuth`, `RedirectIfAuthed`), no dos árboles de router condicionales. Sin sesión → `/` (registro) y `/login` bajo `AuthLayout`; con sesión → `/dashboard`, `/profile/create`, `/feed`, `/matches`.
+- **Rutas:** un único `<BrowserRouter>` con dos ramas protegidas por layout (`RequireAuth`, `RedirectIfAuthed`), no dos árboles de router condicionales. Sin sesión → `/` (registro) y `/login` bajo `AuthLayout`; con sesión → `/dashboard`, `/profile/create`, `/feed`, `/matches`, todas bajo `AppShell`.
+- **Navegación autenticada (`AppShell.jsx`):** una barra inferior fija con 4 pestañas (Inicio, Descubrir, Matches, Perfil), igual en las cuatro pantallas y con el mismo lenguaje visual (subrayado en `nura`) que el selector de Crear cuenta/Entrar de `AuthLayout`. Nada de menús que aparecen y desaparecen: "dónde estoy" se ve siempre igual.
+- **Señales de compatibilidad (`ProfileFeed.jsx`):** calculadas en el cliente comparando el propio perfil con cada tarjeta (mismo neurotipo, misma ubicación, edad parecida ≤3 años). Se muestran como hechos literales, nunca como una puntuación o un porcentaje; no hay backend ni algoritmo de recomendación detrás.
+- **Matches sin chat:** la lista de matches es real, pero el chat (US-009) no existe todavía. El botón dice "Escribir (disponible pronto)" y está deshabilitado a propósito: mejor eso que un enlace que lleve a ningún sitio.
 - **A dónde va tras iniciar sesión:** lo decide solo `RedirectIfAuthed` (según `isAuthenticated` + `justSignedUp` del store). Ningún componente llama a `navigate()` justo después de `setAuth(...)`: hacerlo competía con esa redirección reactiva y a veces un registro nuevo acababa en `/dashboard` en vez de `/profile/create` (bug real, corregido; ver comentarios en `App.jsx` y `authStore.js`).
 - **Estado:** `authStore` (Zustand) guarda `user`, `token`, `isAuthenticated`, `justSignedUp`. Hoy vive en memoria: recargar la página cierra la sesión.
 - **API:** `api/client.js` (axios) añade el token a cada petición; en desarrollo Vite hace proxy de `/api` a `localhost:3001`.
