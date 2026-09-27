@@ -4,6 +4,7 @@ import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js'
 import { sanitizeText } from '../utils/sanitize.js';
 import { sniffImageMime, replaceProfilePhoto } from '../utils/storage.js';
 import { countSwipesToday, DAILY_SWIPE_LIMIT } from './swipeController.js';
+import { sortByAffinity } from '../utils/affinity.js';
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const MAX_NEUROTIPOS = 6; // varias etiquetas están bien (TDAH + TEA...), todas a la vez ya no informa nada
@@ -224,7 +225,14 @@ export const getFeed = async (req, res) => {
     );
 
     const swipesToday = await countSwipesToday(userId);
-    res.json({ ...toPage(result.rows, limit), swipes_today: swipesToday, daily_limit: DAILY_SWIPE_LIMIT });
+    const page = toPage(result.rows, limit); // el cursor sale de aquí, con el orden cronológico real
+
+    // Reordena SOLO esta página ya decidida hacia mayor afinidad (nunca oculta ni salta a nadie:
+    // ver utils/affinity.js). Si el perfil propio no existe todavía, se enseña en orden normal.
+    const mine = await pool.query('SELECT neurodivergence_types FROM profiles WHERE user_id = $1', [userId]);
+    if (mine.rows[0]) page.data = sortByAffinity(mine.rows[0].neurodivergence_types, page.data);
+
+    res.json({ ...page, swipes_today: swipesToday, daily_limit: DAILY_SWIPE_LIMIT });
   } catch (err) {
     log('ERROR', 'get feed failed', { code: err.code, message: err.message });
     res.status(500).json({ error: 'Failed to fetch feed' });
