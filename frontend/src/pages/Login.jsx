@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import client from '../api/client';
 import Field from '../components/Field';
 import { useAuthStore } from '../store/authStore';
@@ -47,7 +47,12 @@ export default function Login() {
       </div>
 
       <Field label="Email" name="email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-      <Field label="Contraseña" name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+      <div>
+        <Field label="Contraseña" name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <Link to="/forgot-password" className="mt-1.5 inline-block text-sm font-semibold text-mute underline underline-offset-4 hover:text-ink">
+          ¿Olvidaste tu contraseña?
+        </Link>
+      </div>
 
       <div role="alert" aria-live="polite" className="min-h-[1.5rem] text-sm font-semibold text-alert">
         {error}

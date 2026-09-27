@@ -25,7 +25,11 @@ function Aura({ p }) {
 
 export default function AuthLayout() {
   const [progress, setProgress] = useState(0);
-  const isLogin = useLocation().pathname === '/login';
+  const { pathname } = useLocation();
+  const isLogin = pathname === '/login';
+  // Fuera de crear cuenta / entrar (recuperar contraseña...) no hay pestaña que marcar como activa:
+  // mostrarla igual habría marcado "Crear cuenta" en una pantalla donde ni se crea cuenta ni se entra.
+  const showTabs = pathname === '/' || pathname === '/login';
 
   return (
     <div className="grid min-h-dvh grid-rows-[auto_1fr] lg:grid-cols-[1.05fr_1fr] lg:grid-rows-1">
@@ -57,23 +61,25 @@ export default function AuthLayout() {
 
       <main className="flex items-start justify-center px-6 pb-8 pt-6 lg:items-center lg:pt-0">
         <div className="animate-rise w-full max-w-sm">
-          <nav aria-label="Acceso" className="mb-6 flex gap-7 text-sm font-semibold lg:mb-10">
-            {[
-              ['/', 'Crear cuenta', !isLogin],
-              ['/login', 'Entrar', isLogin]
-            ].map(([to, label, active]) => (
-              <Link
-                key={to}
-                to={to}
-                aria-current={active ? 'page' : undefined}
-                className={`-my-1 rounded-sm py-3 underline decoration-2 underline-offset-[10px] transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nura ${
-                  active ? 'text-ink decoration-nura' : 'text-mute decoration-transparent hover:text-ink'
-                }`}
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
+          {showTabs && (
+            <nav aria-label="Acceso" className="mb-6 flex gap-7 text-sm font-semibold lg:mb-10">
+              {[
+                ['/', 'Crear cuenta', !isLogin],
+                ['/login', 'Entrar', isLogin]
+              ].map(([to, label, active]) => (
+                <Link
+                  key={to}
+                  to={to}
+                  aria-current={active ? 'page' : undefined}
+                  className={`-my-1 rounded-sm py-3 underline decoration-2 underline-offset-[10px] transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nura ${
+                    active ? 'text-ink decoration-nura' : 'text-mute decoration-transparent hover:text-ink'
+                  }`}
+                >
+                  {label}
+                </Link>
+              ))}
+            </nav>
+          )}
           <Outlet context={{ setProgress }} />
         </div>
       </main>

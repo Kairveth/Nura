@@ -3,6 +3,8 @@ import { useAuthStore } from './store/authStore';
 import AuthLayout from './components/AuthLayout';
 import Signup from './pages/Signup';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import ProfileCreate from './pages/ProfileCreate';
 import ProfileFeed from './pages/ProfileFeed';
@@ -37,6 +39,12 @@ export default function App() {
             <Route path="/" element={<Signup />} />
             <Route path="/login" element={<Login />} />
           </Route>
+        </Route>
+
+        {/* Sin guardas: un enlace de email puede llegar con o sin sesión abierta en otra pestaña */}
+        <Route element={<AuthLayout />}>
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
         </Route>
 
         <Route element={<RequireAuth />}>
