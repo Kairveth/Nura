@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import client from '../api/client';
-import toast from 'react-hot-toast';
+
+const dateFmt = new Intl.DateTimeFormat('es', { day: 'numeric', month: 'short' });
 
 export default function MatchesList() {
-  const navigate = useNavigate();
   const [matches, setMatches] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchMatches();
@@ -16,6 +17,7 @@ export default function MatchesList() {
 
   // Paginado por cursor: 10 matches por petición, "Ver más" pide la siguiente página
   const fetchMatches = async (cursor = null) => {
+    setError('');
     try {
       const params = new URLSearchParams({ limit: 10 });
       if (cursor) params.append('cursor', cursor);
@@ -23,7 +25,7 @@ export default function MatchesList() {
       setMatches((prev) => (cursor ? [...prev, ...res.data.data] : res.data.data));
       setNextCursor(res.data.next_cursor);
     } catch (err) {
-      toast.error('Error loading matches');
+      setError('No pudimos cargar tus matches. Inténtalo de nuevo en un momento.');
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -35,65 +37,68 @@ export default function MatchesList() {
     fetchMatches(nextCursor);
   };
 
-  if (loading) {
-    return <div className="flex justify-center items-center min-h-screen">Cargando...</div>;
-  }
-
-  if (matches.length === 0) {
-    return (
-      <div className="flex flex-col justify-center items-center min-h-screen space-y-4">
-        <h2 className="text-2xl font-bold">Sin matches aún</h2>
-        <p className="text-gray-600">Vuelve al feed y haz algunos swipes 💚</p>
-        <button
-          onClick={() => navigate('/feed')}
-          className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
-        >
-          Ir al feed
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Mis Matches 💚</h1>
+    <div className="mx-auto max-w-sm px-6 py-8">
+      <h1 className="font-display text-3xl font-semibold tracking-tight [font-stretch:88%]">Tus matches</h1>
 
-        <div className="grid gap-4">
-          {matches.map(match => (
-            <div
-              key={match.id}
-              onClick={() => navigate(`/chat/${match.id}`)}
-              className="bg-white p-4 rounded-lg shadow hover:shadow-lg cursor-pointer transition"
-            >
-              <div className="flex gap-4">
-                {match.photo_url && (
-                  <img
-                    src={match.photo_url}
-                    alt="match"
-                    className="w-16 h-16 rounded-lg object-cover"
-                  />
-                )}
-                <div className="flex-1">
-                  <h3 className="font-bold text-lg">{match.age}</h3>
-                  <p className="text-gray-600 text-sm">{match.description}</p>
-                  <p className="text-gray-500 text-xs mt-1">Matched {new Date(match.created_at).toLocaleDateString()}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {nextCursor && (
-          <button
-            onClick={loadMore}
-            disabled={loadingMore}
-            className="mt-6 w-full bg-white border py-3 rounded-lg font-semibold hover:bg-gray-100 disabled:opacity-50"
-          >
-            {loadingMore ? 'Cargando…' : 'Ver más'}
-          </button>
-        )}
+      <div role="alert" aria-live="polite" className="mt-2 min-h-[1.5rem] text-sm font-semibold text-alert">
+        {error}
       </div>
+
+      {loading ? (
+        <p className="mt-4 text-mute">Cargando…</p>
+      ) : matches.length === 0 ? (
+        <div className="mt-6 rounded-2xl border border-line bg-white/50 p-6 text-center">
+          <p className="font-semibold text-ink">Todavía no tienes matches.</p>
+          <p className="mt-2 text-sm text-mute">Cuando dos personas se dicen "me interesa", aparece aquí.</p>
+          <Link to="/feed" className="mt-4 inline-block font-semibold text-nura underline underline-offset-4 hover:text-nura-deep">
+            Ir a Descubrir
+          </Link>
+        </div>
+      ) : (
+        <>
+          <ul className="mt-6 space-y-3">
+            {matches.map((match) => (
+              <li key={match.id} className="rounded-2xl border border-line bg-white/70 p-4">
+                <div className="flex gap-4">
+                  {match.photo_url ? (
+                    <img src={match.photo_url} alt="" className="h-16 w-16 shrink-0 rounded-2xl object-cover" />
+                  ) : (
+                    <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-fog text-xs text-mute">Sin foto</div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-ink">
+                      {match.age} años{match.location ? ` · ${match.location}` : ''}
+                    </p>
+                    <p className="truncate text-sm text-mute">{match.description}</p>
+                    <p className="mt-1 text-xs text-mute">Match del {dateFmt.format(new Date(match.created_at))}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  className="mt-3 h-10 w-full cursor-not-allowed rounded-2xl border border-line text-sm font-semibold text-mute"
+                  title="El chat llega en una próxima actualización"
+                >
+                  Escribir (disponible pronto)
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {nextCursor && (
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="mt-4 h-12 w-full rounded-2xl border border-line bg-white/70 text-base font-semibold text-ink transition-colors duration-200 hover:border-nura disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nura"
+            >
+              {loadingMore ? 'Cargando…' : 'Ver más'}
+            </button>
+          )}
+        </>
+      )}
     </div>
   );
 }

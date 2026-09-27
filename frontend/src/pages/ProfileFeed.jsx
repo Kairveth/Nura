@@ -1,32 +1,65 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import client from '../api/client';
-import toast from 'react-hot-toast';
+import Field from '../components/Field';
+import { useAuthStore } from '../store/authStore';
 
 const PAGE_SIZE = 10;
-const validAge = (v) => v && Number.isInteger(Number(v)) && Number(v) >= 18 && Number(v) <= 120;
+const NEUROTIPO_OPTIONS = ['TDAH', 'Autismo', 'Dislexia', 'Dispraxia', 'No diagnosticado', 'Prefiero no decir'];
+const validAge = (v) => v !== '' && Number.isInteger(Number(v)) && Number(v) >= 18 && Number(v) <= 120;
+const hasFilters = (f) => Object.values(f).some(Boolean);
+
+// Señales de compatibilidad, calculadas aquí mismo (no hay algoritmo de recomendación en el MVP):
+// hechos literales, nunca un porcentaje ni una puntuación. Máximo 2, para no saturar la tarjeta.
+const compatChips = (mine, card) => {
+  if (!mine) return [];
+  const chips = [];
+  if (mine.neurotipo && card.neurotipo === mine.neurotipo) chips.push(`Mismo neurotipo: ${card.neurotipo}`);
+  if (mine.location && card.location && mine.location.trim().toLowerCase() === card.location.trim().toLowerCase()) {
+    chips.push(`Misma ubicación: ${card.location}`);
+  }
+  if (Number.isInteger(mine.age) && Number.isInteger(card.age) && Math.abs(mine.age - card.age) <= 3) {
+    chips.push('Edad parecida');
+  }
+  return chips.slice(0, 2);
+};
 
 export default function ProfileFeed() {
+  const userId = useAuthStore((state) => state.user.id);
+  const [myProfile, setMyProfile] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [swipesToday, setSwipesToday] = useState(0);
+  const [dailyLimit, setDailyLimit] = useState(15);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
-    age_min: '',
-    age_max: '',
-    location: '',
-    neurotipo: ''
-  });
+  const [swiping, setSwiping] = useState(false);
+  const [error, setError] = useState('');
+  const [matchBanner, setMatchBanner] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState({ age_min: '', age_max: '', location: '', neurotipo: '' });
+
+  useEffect(() => {
+    client.get(`/api/profiles/${userId}`).then((res) => setMyProfile(res.data)).catch(() => {});
+  }, [userId]);
 
   // Espera a que el usuario termine de escribir antes de pedir el feed
   useEffect(() => {
     const timer = setTimeout(() => fetchFeed(), 400);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
+
+  useEffect(() => {
+    if (!matchBanner) return;
+    const timer = setTimeout(() => setMatchBanner(''), 3000);
+    return () => clearTimeout(timer);
+  }, [matchBanner]);
 
   // Una página cada vez (cursor). Los perfiles ya valorados no vuelven, así que se reemplaza la
   // página en lugar de acumular: la memoria del cliente no crece con el uso.
   const fetchFeed = async (cursor = null) => {
     setLoading(true);
+    setError('');
     try {
       const params = new URLSearchParams({ limit: PAGE_SIZE });
       Object.entries(filters).forEach(([key, value]) => {
@@ -39,29 +72,28 @@ export default function ProfileFeed() {
       const res = await client.get(`/api/profiles/feed?${params}`);
       setProfiles(res.data.data);
       setNextCursor(res.data.next_cursor);
+      setSwipesToday(res.data.swipes_today);
+      setDailyLimit(res.data.daily_limit);
       setCurrentIndex(0);
     } catch (err) {
-      toast.error('Error loading profiles');
+      setError('No pudimos cargar perfiles. Inténtalo de nuevo en un momento.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleSwipe = async (action) => {
-    if (currentIndex >= profiles.length) return;
-
+    if (currentIndex >= profiles.length || swiping) return;
     const profile = profiles[currentIndex];
+    setSwiping(true);
+    setError('');
 
     try {
-      const res = await client.post('/api/swipes', {
-        swiped_id: profile.user_id,
-        action
-      });
+      const res = await client.post('/api/swipes', { swiped_id: profile.user_id, action });
+      setSwipesToday(res.data.swipes_today);
 
       if (res.data.match) {
-        toast.success('¡Match! 💚');
-      } else {
-        toast.success(action === 'yes' ? '✓' : '✕', { duration: 500 });
+        setMatchBanner(`Es un match con el perfil de ${profile.location || 'esa persona'}. Podéis empezar a escribiros.`);
       }
 
       const nextIndex = currentIndex + 1;
@@ -71,98 +103,165 @@ export default function ProfileFeed() {
         setCurrentIndex(nextIndex);
       }
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Error en swipe');
+      if (err.response?.status === 429) {
+        setSwipesToday(err.response.data.limit ?? dailyLimit);
+      } else {
+        setError(err.response?.data?.error === 'Already swiped this profile' ? 'Ya habías valorado este perfil.' : 'No pudimos guardar tu respuesta. Inténtalo de nuevo.');
+      }
+    } finally {
+      setSwiping(false);
     }
   };
 
-  if (loading) {
-    return <div className="flex justify-center items-center min-h-screen">Cargando...</div>;
-  }
-
-  if (profiles.length === 0 || currentIndex >= profiles.length) {
-    return (
-      <div className="flex flex-col justify-center items-center min-h-screen space-y-4">
-        <h2 className="text-2xl font-bold">No hay más perfiles</h2>
-        <button
-          onClick={() => fetchFeed()}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          Buscar de nuevo
-        </button>
-      </div>
-    );
-  }
-
+  const clearFilters = () => setFilters({ age_min: '', age_max: '', location: '', neurotipo: '' });
+  const dailyLimitReached = swipesToday >= dailyLimit;
   const profile = profiles[currentIndex];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Filtros */}
-      <div className="bg-white p-4 border-b flex gap-2 overflow-x-auto">
-        <input
-          type="number"
-          placeholder="Edad min"
-          value={filters.age_min}
-          onChange={(e) => setFilters(prev => ({ ...prev, age_min: e.target.value }))}
-          className="px-3 py-1 border rounded text-sm"
-        />
-        <input
-          type="number"
-          placeholder="Edad max"
-          value={filters.age_max}
-          onChange={(e) => setFilters(prev => ({ ...prev, age_max: e.target.value }))}
-          className="px-3 py-1 border rounded text-sm"
-        />
-        <select
-          value={filters.neurotipo}
-          onChange={(e) => setFilters(prev => ({ ...prev, neurotipo: e.target.value }))}
-          className="px-3 py-1 border rounded text-sm"
+    <div className="mx-auto max-w-sm px-6 py-8">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-3xl font-semibold tracking-tight [font-stretch:88%]">Descubrir</h1>
+          <p className="mt-1 text-sm text-mute">
+            {swipesToday}/{dailyLimit} hoy
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((v) => !v)}
+          aria-expanded={filtersOpen}
+          className="h-10 rounded-2xl border border-line bg-white/70 px-4 text-sm font-semibold text-ink transition-colors duration-200 hover:border-nura focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nura"
         >
-          <option value="">Todos neurotipo</option>
-          <option value="TDAH">TDAH</option>
-          <option value="Autismo">Autismo</option>
-          <option value="Dislexia">Dislexia</option>
-        </select>
+          Filtros{hasFilters(filters) ? ' ·' : ''}
+        </button>
       </div>
 
-      {/* Profile Card */}
-      <div className="flex-1 flex items-center justify-center p-4">
-        <div className="max-w-sm w-full bg-white rounded-lg shadow-lg overflow-hidden">
-          {profile.photo_url && (
-            <img
-              src={profile.photo_url}
-              alt={profile.user_id}
-              className="w-full h-96 object-cover"
+      {filtersOpen && (
+        <div className="mb-6 space-y-4 rounded-2xl border border-line bg-white/50 p-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label="Edad mín."
+              name="age_min"
+              type="number"
+              inputMode="numeric"
+              min="18"
+              max="120"
+              value={filters.age_min}
+              onChange={(e) => setFilters((f) => ({ ...f, age_min: e.target.value }))}
             />
+            <Field
+              label="Edad máx."
+              name="age_max"
+              type="number"
+              inputMode="numeric"
+              min="18"
+              max="120"
+              value={filters.age_max}
+              onChange={(e) => setFilters((f) => ({ ...f, age_max: e.target.value }))}
+            />
+          </div>
+          <Field
+            label="Ubicación"
+            name="location"
+            placeholder="Ciudad o región"
+            value={filters.location}
+            onChange={(e) => setFilters((f) => ({ ...f, location: e.target.value }))}
+          />
+          <Field as="select" label="Tipo de neurodivergencia" name="neurotipo" value={filters.neurotipo} onChange={(e) => setFilters((f) => ({ ...f, neurotipo: e.target.value }))}>
+            <option value="">Todos</option>
+            {NEUROTIPO_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </Field>
+          {hasFilters(filters) && (
+            <button type="button" onClick={clearFilters} className="text-sm font-semibold text-mute underline underline-offset-4 hover:text-ink">
+              Quitar filtros
+            </button>
           )}
-          <div className="p-6">
-            <div className="flex justify-between items-start mb-2">
-              <h2 className="text-2xl font-bold">{profile.age}</h2>
-              <span className="bg-blue-100 text-blue-800 text-xs px-3 py-1 rounded-full">
-                {profile.neurotipo}
-              </span>
+        </div>
+      )}
+
+      {matchBanner && (
+        <div role="status" className="mb-4 rounded-2xl border border-sage bg-sage/15 p-4 text-sm font-semibold text-ink">
+          {matchBanner}
+        </div>
+      )}
+
+      <div role="alert" aria-live="polite" className="mb-2 min-h-[1.5rem] text-sm font-semibold text-alert">
+        {error}
+      </div>
+
+      {loading ? (
+        <p className="text-mute">Cargando…</p>
+      ) : dailyLimitReached ? (
+        <div className="rounded-2xl border border-line bg-white/50 p-6 text-center">
+          <p className="font-semibold text-ink">Ya viste tus {dailyLimit} perfiles de hoy.</p>
+          <p className="mt-2 text-sm text-mute">Vuelve mañana con la cabeza despejada: así decides mejor, no más rápido.</p>
+        </div>
+      ) : !profile ? (
+        <div className="rounded-2xl border border-line bg-white/50 p-6 text-center">
+          <p className="font-semibold text-ink">No hay más perfiles por ahora.</p>
+          <p className="mt-2 text-sm text-mute">
+            {hasFilters(filters) ? 'Prueba a quitar algún filtro.' : 'Vuelve más tarde: se suman perfiles nuevos.'}
+          </p>
+          {hasFilters(filters) && (
+            <button type="button" onClick={clearFilters} className="mt-4 font-semibold text-nura underline underline-offset-4 hover:text-nura-deep">
+              Quitar filtros
+            </button>
+          )}
+        </div>
+      ) : (
+        <div>
+          <div className="overflow-hidden rounded-2xl border border-line bg-white/70">
+            {profile.photo_url ? (
+              <img src={profile.photo_url} alt="" className="aspect-[4/5] w-full object-cover" />
+            ) : (
+              <div className="grid aspect-[4/5] w-full place-items-center bg-fog text-mute">Sin foto</div>
+            )}
+            <div className="p-5">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-xl font-semibold text-ink">
+                  {profile.age} años{profile.location ? ` · ${profile.location}` : ''}
+                </p>
+              </div>
+              <p className="mt-1 text-sm font-semibold text-mute">{profile.neurotipo}</p>
+
+              {compatChips(myProfile, profile).length > 0 && (
+                <ul className="mt-3 flex flex-wrap gap-2">
+                  {compatChips(myProfile, profile).map((chip) => (
+                    <li key={chip} className="rounded-full border border-sage bg-sage/15 px-3 py-1 text-xs font-semibold text-ink">
+                      {chip}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <p className="mt-4 text-ink">{profile.description}</p>
             </div>
-            <p className="text-gray-600 text-sm mb-2">{profile.location}</p>
-            <p className="text-gray-700 line-clamp-3">{profile.description}</p>
+          </div>
+
+          <div className="mt-4 flex gap-3">
+            <button
+              type="button"
+              onClick={() => handleSwipe('no')}
+              disabled={swiping}
+              className="h-12 flex-1 rounded-2xl border border-line bg-white/70 text-base font-semibold text-ink transition-colors duration-200 hover:border-nura disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nura"
+            >
+              Pasar
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSwipe('yes')}
+              disabled={swiping}
+              className="h-12 flex-1 rounded-2xl bg-nura text-base font-semibold text-white transition-[background-color,transform,opacity] duration-200 hover:bg-nura-deep active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-nura"
+            >
+              Me interesa
+            </button>
           </div>
         </div>
-      </div>
-
-      {/* Swipe Buttons */}
-      <div className="bg-white border-t p-4 flex gap-4 justify-center">
-        <button
-          onClick={() => handleSwipe('no')}
-          className="bg-red-500 text-white px-8 py-3 rounded-full text-xl font-bold hover:bg-red-600"
-        >
-          ✕
-        </button>
-        <button
-          onClick={() => handleSwipe('yes')}
-          className="bg-green-500 text-white px-8 py-3 rounded-full text-xl font-bold hover:bg-green-600"
-        >
-          ✓
-        </button>
-      </div>
+      )}
     </div>
   );
 }

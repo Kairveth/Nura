@@ -13,7 +13,6 @@
     "axios": "^1.6.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-hot-toast": "^2.4.1",
     "react-router-dom": "^7.18.4",
     "zustand": "^4.4.4"
   },

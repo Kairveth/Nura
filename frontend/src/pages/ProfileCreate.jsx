@@ -12,6 +12,7 @@ export default function ProfileCreate() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const clearJustSignedUp = useAuthStore((state) => state.clearJustSignedUp);
+  const logout = useAuthStore((state) => state.logout);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [existing, setExisting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -103,63 +104,65 @@ export default function ProfileCreate() {
   };
 
   if (loadingProfile) {
-    return <div className="grid min-h-dvh place-items-center bg-fog text-mute">Cargando…</div>;
+    return <p className="px-6 py-8 text-mute">Cargando…</p>;
   }
 
   return (
-    <div className="min-h-dvh bg-fog">
-      <div className="mx-auto max-w-sm px-6 py-8">
-        <p className="font-display text-2xl font-bold lowercase tracking-tight text-ink [font-stretch:80%]">nura</p>
+    <div className="mx-auto max-w-sm px-6 py-8">
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
+        <div>
+          <h1 className="font-display text-3xl font-semibold tracking-tight [font-stretch:88%]">
+            {existing ? 'Tu perfil' : 'Completa tu perfil'}
+          </h1>
+          <p className="mt-2 text-mute">Una foto y una descripción corta. Nada más te hace falta para empezar.</p>
+        </div>
 
-        <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-5">
-          <div>
-            <h1 className="font-display text-3xl font-semibold tracking-tight [font-stretch:88%]">
-              {existing ? 'Tu perfil' : 'Completa tu perfil'}
-            </h1>
-            <p className="mt-2 text-mute">Una foto y una descripción corta. Nada más te hace falta para empezar.</p>
-          </div>
+        <PhotoField previewUrl={photoPreview} uploading={uploading} error={photoError} onSelect={handlePhotoSelect} />
 
-          <PhotoField previewUrl={photoPreview} uploading={uploading} error={photoError} onSelect={handlePhotoSelect} />
+        <Field
+          as="textarea"
+          label="Descripción"
+          name="description"
+          placeholder="Cuéntanos algo directo: qué buscas, qué te describe."
+          value={form.description}
+          onChange={handleChange}
+          hint={`${form.description.length}/200 caracteres`}
+          required
+        />
 
-          <Field
-            as="textarea"
-            label="Descripción"
-            name="description"
-            placeholder="Cuéntanos algo directo: qué buscas, qué te describe."
-            value={form.description}
-            onChange={handleChange}
-            hint={`${form.description.length}/200 caracteres`}
-            required
-          />
+        <Field label="Edad" name="age" type="number" inputMode="numeric" min="18" max="120" value={form.age} onChange={handleChange} required />
 
-          <Field label="Edad" name="age" type="number" inputMode="numeric" min="18" max="120" value={form.age} onChange={handleChange} required />
+        <Field label="Ubicación" name="location" placeholder="Ciudad o región" value={form.location} onChange={handleChange} required />
 
-          <Field label="Ubicación" name="location" placeholder="Ciudad o región" value={form.location} onChange={handleChange} required />
-
-          <Field as="select" label="Tipo de neurodivergencia" name="neurotipo" value={form.neurotipo} onChange={handleChange} required>
-            <option value="" disabled>
-              Selecciona una opción
+        <Field as="select" label="Tipo de neurodivergencia" name="neurotipo" value={form.neurotipo} onChange={handleChange} required>
+          <option value="" disabled>
+            Selecciona una opción
+          </option>
+          {NEUROTIPO_OPTIONS.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
             </option>
-            {NEUROTIPO_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </Field>
+          ))}
+        </Field>
 
-          <div role="alert" aria-live="polite" className="min-h-[1.5rem] text-sm font-semibold text-alert">
-            {error}
-          </div>
+        <div role="alert" aria-live="polite" className="min-h-[1.5rem] text-sm font-semibold text-alert">
+          {error}
+        </div>
 
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="h-12 w-full rounded-2xl bg-nura text-base font-semibold text-white transition-[background-color,transform,opacity] duration-200 hover:bg-nura-deep active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-nura sm:h-14"
-          >
-            {uploading ? 'Subiendo foto…' : saving ? 'Guardando…' : 'Guardar perfil'}
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="h-12 w-full rounded-2xl bg-nura text-base font-semibold text-white transition-[background-color,transform,opacity] duration-200 hover:bg-nura-deep active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-nura sm:h-14"
+        >
+          {uploading ? 'Subiendo foto…' : saving ? 'Guardando…' : 'Guardar perfil'}
+        </button>
+
+        {existing && (
+          <button type="button" onClick={logout} className="text-sm font-semibold text-mute underline underline-offset-4 hover:text-ink">
+            Cerrar sesión
           </button>
-        </form>
-      </div>
+        )}
+      </form>
     </div>
   );
 }

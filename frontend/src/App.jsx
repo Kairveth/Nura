@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import AuthLayout from './components/AuthLayout';
+import AppShell from './components/AppShell';
 import Signup from './pages/Signup';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
@@ -48,10 +49,12 @@ export default function App() {
         </Route>
 
         <Route element={<RequireAuth />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/profile/create" element={<ProfileCreate />} />
-          <Route path="/feed" element={<ProfileFeed />} />
-          <Route path="/matches" element={<MatchesList />} />
+          <Route element={<AppShell />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/profile/create" element={<ProfileCreate />} />
+            <Route path="/feed" element={<ProfileFeed />} />
+            <Route path="/matches" element={<MatchesList />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/'} replace />} />
