@@ -24,12 +24,32 @@ const NEUROTIPO_OPTIONS = [
 const validAge = (v) => v !== '' && Number.isInteger(Number(v)) && Number(v) >= 18 && Number(v) <= 120;
 const hasFilters = (f) => Boolean(f.age_min || f.age_max || f.location || f.neurotipos.length > 0);
 
+// Debe coincidir con COMPLEMENTARY_PAIRS en backend/src/utils/affinity.js. Solo para el TEXTO del
+// chip (literal, nunca un número): el orden real del feed lo decide el servidor con su propia copia.
+const COMPLEMENTARY_PAIRS = [
+  ['TDAH', 'TEA/Autismo'],
+  ['AACC (Altas Capacidades)', 'TDAH'],
+  ['PAS (Alta Sensibilidad)', 'TEA/Autismo']
+];
+
+// Etiquetas que no dicen nada comparable de la persona (igual que en backend/src/utils/affinity.js)
+const IGNORE_TAGS = new Set(['Sin diagnóstico formal', 'Prefiero no decir']);
+
 // Señales de compatibilidad, calculadas aquí mismo (no hay algoritmo de recomendación en el MVP):
-// hechos literales, nunca un porcentaje ni una puntuación. Máximo 2, para no saturar la tarjeta.
+// hechos literales, nunca un porcentaje ni una puntuación. Máximo 2, por orden de interés, para no
+// saturar la tarjeta. El orden real del feed lo decide el servidor; esto es solo el texto visible.
 const compatChips = (mine, card) => {
   if (!mine) return [];
+  const mineTags = (mine.neurotipos ?? []).filter((t) => !IGNORE_TAGS.has(t));
+  const cardTags = (card.neurotipos ?? []).filter((t) => !IGNORE_TAGS.has(t));
   const chips = [];
-  const shared = (mine.neurotipos ?? []).filter((t) => (card.neurotipos ?? []).includes(t));
+
+  for (const [a, b] of COMPLEMENTARY_PAIRS) {
+    if ((mineTags.includes(a) && cardTags.includes(b)) || (mineTags.includes(b) && cardTags.includes(a))) {
+      chips.push(`${a} + ${b}: una combinación que muchos describen como compatible`);
+    }
+  }
+  const shared = mineTags.filter((t) => cardTags.includes(t));
   if (shared.length > 0) chips.push(`Comparte: ${shared.join(', ')}`);
   if (mine.location && card.location && mine.location.trim().toLowerCase() === card.location.trim().toLowerCase()) {
     chips.push(`Misma ubicación: ${card.location}`);
