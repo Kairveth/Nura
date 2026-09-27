@@ -1,13 +1,17 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pool from '../db.js';
 import { log, audit, ipTag } from '../utils/logger.js';
+import { sendEmail } from '../utils/email.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 8;
 const MAX_PASSWORD_BYTES = 72; // bcrypt ignora lo que pase de 72 bytes
 const MAX_FAILED_LOGINS = 5; // intentos fallidos antes de bloquear la cuenta
 const LOCK_MINUTES = 15;
+const RESET_TOKEN_MINUTES = 30;
+const RESET_COOLDOWN_SECONDS = 120; // no reenviar el email si ya se pidió hace menos de esto
 // Hash de relleno: login compara siempre contra un hash, exista o no el usuario (evita enumerar por tiempo)
 const DUMMY_HASH = bcrypt.hashSync('nura-dummy-password', 10);
 
@@ -122,5 +126,89 @@ export const logoutAll = async (req, res) => {
   } catch (err) {
     log('ERROR', 'logout-all failed', { code: err.code, message: err.message });
     res.status(500).json({ error: 'Failed to reset sessions' });
+  }
+};
+
+const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
+const GENERIC_RESET_MESSAGE = 'Si existe una cuenta con ese email, te hemos enviado un enlace para restablecer la contraseña.';
+
+// POST /api/auth/forgot-password { email }. Responde SIEMPRE el mismo mensaje, exista o no la
+// cuenta (evita enumeración): el email es el único canal por el que se sabe si funcionó de verdad.
+export const forgotPassword = async (req, res) => {
+  try {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!email || email.length > 254 || !EMAIL_RE.test(email)) {
+      return res.status(400).json({ error: 'Invalid email' });
+    }
+
+    const result = await pool.query('SELECT id, email, reset_requested_at FROM users WHERE email = $1', [email]);
+    const user = result.rows[0];
+    const cooldown = user?.reset_requested_at && Date.now() - new Date(user.reset_requested_at).getTime() < RESET_COOLDOWN_SECONDS * 1000;
+
+    if (user && !cooldown) {
+      const token = crypto.randomBytes(32).toString('base64url'); // viaja por email; solo su hash se guarda
+      await pool.query(
+        'UPDATE users SET reset_token_hash = $2, reset_token_expires_at = NOW() + make_interval(mins => $3), reset_requested_at = NOW() WHERE id = $1',
+        [user.id, sha256(token), RESET_TOKEN_MINUTES]
+      );
+
+      const link = `${(process.env.FRONTEND_URL || 'http://localhost:3000').split(',')[0]}/reset-password?token=${token}`;
+      const sent = await sendEmail({
+        to: user.email,
+        subject: 'Restablece tu contraseña de Nura',
+        html: `<p>Pediste restablecer tu contraseña. Este enlace caduca en ${RESET_TOKEN_MINUTES} minutos y solo sirve una vez.</p><p><a href="${link}">${link}</a></p><p>Si no fuiste tú, ignora este correo: tu contraseña sigue igual.</p>`
+      });
+      audit(sent ? 'password_reset_requested' : 'password_reset_email_failed', { user_id: user.id, ip: ipTag(req) });
+    } else {
+      audit('password_reset_unknown_or_cooldown', { ip: ipTag(req) });
+    }
+
+    res.json({ message: GENERIC_RESET_MESSAGE });
+  } catch (err) {
+    log('ERROR', 'forgot-password failed', { code: err.code, message: err.message });
+    // El mismo mensaje también en el error: no delatar por el tipo de respuesta si algo falló
+    res.json({ message: GENERIC_RESET_MESSAGE });
+  }
+};
+
+// POST /api/auth/reset-password { token, password }. El token es de un solo uso: se limpia tanto
+// si acierta como si falla por caducado, y cambiar la contraseña restablece todas las sesiones.
+export const resetPassword = async (req, res) => {
+  try {
+    const { token } = req.body ?? {};
+    const password = req.body?.password;
+    if (typeof token !== 'string' || !token) {
+      return res.status(400).json({ error: 'Invalid or expired token' });
+    }
+    if (typeof password !== 'string' || password.length < MIN_PASSWORD || Buffer.byteLength(password) > MAX_PASSWORD_BYTES) {
+      return res.status(400).json({ error: 'Password must be 8-72 characters' });
+    }
+
+    const result = await pool.query(
+      'SELECT id, reset_token_expires_at FROM users WHERE reset_token_hash = $1',
+      [sha256(token)]
+    );
+    const user = result.rows[0];
+    const valid = user && new Date(user.reset_token_expires_at) > new Date();
+
+    if (!valid) {
+      audit('password_reset_invalid_token', { ip: ipTag(req) });
+      return res.status(400).json({ error: 'Invalid or expired token' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    await pool.query(
+      `UPDATE users SET password_hash = $2, token_version = token_version + 1,
+         failed_logins = 0, locked_until = NULL,
+         reset_token_hash = NULL, reset_token_expires_at = NULL
+       WHERE id = $1`,
+      [user.id, passwordHash]
+    );
+    audit('password_reset_done', { user_id: user.id, ip: ipTag(req) });
+
+    res.json({ ok: true });
+  } catch (err) {
+    log('ERROR', 'reset-password failed', { code: err.code, message: err.message });
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 };

@@ -33,3 +33,11 @@ export const userLimiter = limiter({
   keyGenerator: (req) => (req.user ? `u:${req.user.id}` : ipKeyGenerator(req.ip)),
   message: { error: 'Too many requests' }
 });
+
+// Recuperar contraseña: 3 / hora por IP. Se suma al enfriamiento por cuenta del controlador
+// (2 min entre envíos), que evita que muchas IPs distintas saturen el buzón de una sola víctima.
+export const passwordResetLimiter = limiter({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  message: { error: 'Too many requests' }
+});
