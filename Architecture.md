@@ -62,8 +62,9 @@ Las rutas autenticadas añaden `authMiddleware` (JWT + `token_version`) y `userL
 |---|---|---|---|
 | POST | `/api/auth/signup` | — (rate limit 5/15 min) | Crea usuario, devuelve `{ user, token }` |
 | POST | `/api/auth/login` | — (rate limit 5/15 min) | Devuelve `{ user, token }` |
-| POST | `/api/profiles` | JWT | Crea el perfil propio |
+| POST | `/api/profiles` | JWT | Crea el perfil propio (acepta `photo_url`) |
 | PUT | `/api/profiles` | JWT | Edita el perfil propio |
+| POST | `/api/profiles/photo` | JWT | Sube una foto (multipart), devuelve `{ photo_url }`; no toca la BD |
 | GET | `/api/profiles/feed` | JWT | Perfiles aún no valorados, con filtros. **Paginado por cursor** |
 | GET | `/api/profiles/:userId` | JWT | Perfil por id |
 | POST | `/api/auth/logout-all` | JWT | Restablece **todas** las sesiones del usuario |
@@ -121,10 +122,25 @@ PostgreSQL con `users`, `profiles`, `swipes`, `matches` y `messages` (esta últi
 
 Plantillas en `backend/.env.example` y `frontend/.env.example`. Los `.env` reales nunca se versionan.
 
+### Fotos de perfil (Supabase Storage)
+
+Bucket `profile-photos`: público solo para **lectura** (URL directa, nombre de fichero aleatorio,
+sin listado posible con la clave anon — comprobado). Todas las escrituras (subir, reemplazar, borrar)
+las hace el backend con la **service key** (`SUPABASE_SERVICE_KEY`, nunca en el frontend, omite RLS).
+
+- `POST /api/profiles/photo` (multipart, campo `photo`): valida tipo real por cabecera de fichero
+  (no el `mimetype` que manda el navegador) y tamaño (≤ 5 MB); sube con nombre aleatorio bajo
+  `{userId}/...`; borra la foto anterior del usuario si había. Devuelve `{ photo_url }`; el cliente
+  la incluye al crear/editar el perfil (este endpoint no toca la base de datos).
+- La URL pública pasa por el CDN de Supabase (`cache-control: max-age=300`): tras reemplazar una
+  foto, la anterior puede seguir sirviéndose desde caché hasta 5 min aunque el origen ya la borró.
+  Nunca se vuelve a devolver esa URL, así que no hay forma de encontrarla salvo tenerla ya guardada.
+
 ## 4. Frontend
 
-- **Rutas:** sin sesión → `/` (registro) y `/login` bajo `AuthLayout`; con sesión → `/dashboard`, `/profile/create`, `/feed`, `/matches`.
-- **Estado:** `authStore` (Zustand) guarda `user`, `token`, `isAuthenticated`. Hoy vive en memoria: recargar la página cierra la sesión.
+- **Rutas:** un único `<BrowserRouter>` con dos ramas protegidas por layout (`RequireAuth`, `RedirectIfAuthed`), no dos árboles de router condicionales. Sin sesión → `/` (registro) y `/login` bajo `AuthLayout`; con sesión → `/dashboard`, `/profile/create`, `/feed`, `/matches`.
+- **A dónde va tras iniciar sesión:** lo decide solo `RedirectIfAuthed` (según `isAuthenticated` + `justSignedUp` del store). Ningún componente llama a `navigate()` justo después de `setAuth(...)`: hacerlo competía con esa redirección reactiva y a veces un registro nuevo acababa en `/dashboard` en vez de `/profile/create` (bug real, corregido; ver comentarios en `App.jsx` y `authStore.js`).
+- **Estado:** `authStore` (Zustand) guarda `user`, `token`, `isAuthenticated`, `justSignedUp`. Hoy vive en memoria: recargar la página cierra la sesión.
 - **API:** `api/client.js` (axios) añade el token a cada petición; en desarrollo Vite hace proxy de `/api` a `localhost:3001`.
 - **UI:** Tailwind con tokens propios (ver `Design_System.md`). `AuthLayout` aloja el aura compartida y expone `setProgress` vía `Outlet context`.
 

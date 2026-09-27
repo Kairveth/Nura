@@ -63,8 +63,8 @@ Ids según `Especificacion/03-user-stories.md`.
 |---|---|---|---|
 | US-001 | Registrarme con email + contraseña | Validación en servidor, error claro, sesión creada | Hecho (falta verificación de email) |
 | US-002 | Iniciar sesión | JWT 1 h, logout limpia sesión | Hecho (sesión en memoria, no persiste al recargar) |
-| US-003 | Crear perfil | 1 foto + 200 caracteres, vista previa | API hecha; UI sin rediseñar; subida de foto pendiente |
-| US-004 | Editar perfil | Cambios visibles al momento | API hecha; UI pendiente |
+| US-003 | Crear perfil | 1 foto + 200 caracteres, vista previa | Hecho (foto en Supabase Storage) |
+| US-004 | Editar perfil | Cambios visibles al momento | Hecho (misma pantalla que US-003, detecta perfil existente) |
 | US-005 | Ver otros perfiles | Foto, descripción, edad y tipo legibles | API hecha; UI sin rediseñar |
 | US-006 | Filtrar | Edad, ubicación, tipo; sin filtro = todos | API hecha; UI pendiente |
 | US-007 | Swipe sí/no | Botones grandes, confirmación silenciosa | API hecha; UI sin rediseñar |
@@ -102,6 +102,5 @@ Ids según `Especificacion/03-user-stories.md`.
 
 - **Estimación vs. plazo:** `04-features-mvp.md` suma ~94 h de desarrollo (~6 semanas con testing y despliegue) frente a 4 semanas de plazo. Recortar o paralelizar.
 - **Sesión persistente (US-002):** guardar el token en `localStorage` mejora la experiencia pero lo expone a XSS; alternativa: cookie `httpOnly`. Decidir antes de la beta.
-- **Foto de perfil:** falta decidir el almacenamiento (privado, con control de acceso) y las reglas (máx. 5 MB, jpg/png).
 - **Verificación de email:** proveedor pendiente (Resend o SendGrid).
 - **Población vulnerable:** definir política de moderación y reporte antes de abrir la beta.

@@ -107,7 +107,7 @@ Especificación cumplida ✓ · checklist de seguridad ✓ · build y pruebas ma
 
 **Siguiente, por prioridad:**
 1. Cerrar la **deuda de seguridad** pendiente (lista local, no versionada: `Seguridad/PENDIENTES.local.md`).
-2. UI de perfil (`ProfileCreate`) con foto (1) y descripción (200 caracteres) — US-003/004.
+2. ~~UI de perfil con foto y descripción~~ — hecho (`ProfileCreate`, sirve para crear y editar).
 3. UI de feed y swipe (`ProfileFeed`, `MatchesList`) — pocos perfiles por sesión, sin scroll infinito — US-005 a US-008.
 4. Chat 1:1 con polling de 2 s y recomendación de quedar — US-009 a US-011.
 5. Ajustes: exportar y borrar cuenta (GDPR) — US-012/013; verificación de email.
