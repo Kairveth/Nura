@@ -2,6 +2,18 @@ import pool from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js';
 
+// Tope diario de valoraciones: es la palanca de "calidad sobre cantidad", no un límite técnico.
+// Menos perfiles por día empuja a decidir con atención en vez de acumular swipes sin pensar.
+export const DAILY_SWIPE_LIMIT = 15;
+
+export const countSwipesToday = async (userId) => {
+  const { rows } = await pool.query(
+    "SELECT count(*)::int AS n FROM swipes WHERE from_user_id = $1 AND created_at >= date_trunc('day', now())",
+    [userId]
+  );
+  return rows[0].n;
+};
+
 // POST /api/swipes { swiped_id, action: 'yes' | 'no' }
 // El match mutuo se crea aquí, dentro de una transacción con bloqueo por pareja: si dos personas se dan
 // "sí" a la vez, la segunda transacción espera a la primera y ve su swipe (no se pierde ningún match).
@@ -14,6 +26,11 @@ export const createSwipe = async (req, res) => {
   }
   if (swiped_id.toLowerCase() === String(swiper_id).toLowerCase()) {
     return res.status(400).json({ error: 'Cannot swipe yourself' });
+  }
+
+  const swipesToday = await countSwipesToday(swiper_id);
+  if (swipesToday >= DAILY_SWIPE_LIMIT) {
+    return res.status(429).json({ error: 'Daily swipe limit reached', limit: DAILY_SWIPE_LIMIT });
   }
 
   const client = await pool.connect();
@@ -45,7 +62,7 @@ export const createSwipe = async (req, res) => {
     }
 
     await client.query('COMMIT');
-    res.status(201).json({ swipe: swipe.rows[0], match });
+    res.status(201).json({ swipe: swipe.rows[0], match, swipes_today: swipesToday + 1, daily_limit: DAILY_SWIPE_LIMIT });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     log('ERROR', 'create swipe failed', { code: err.code, message: err.message });

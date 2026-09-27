@@ -3,6 +3,7 @@ import { log } from '../utils/logger.js';
 import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js';
 import { sanitizeText } from '../utils/sanitize.js';
 import { sniffImageMime, replaceProfilePhoto } from '../utils/storage.js';
+import { countSwipesToday, DAILY_SWIPE_LIMIT } from './swipeController.js';
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
@@ -192,7 +193,8 @@ export const getFeed = async (req, res) => {
       values
     );
 
-    res.json(toPage(result.rows, limit));
+    const swipesToday = await countSwipesToday(userId);
+    res.json({ ...toPage(result.rows, limit), swipes_today: swipesToday, daily_limit: DAILY_SWIPE_LIMIT });
   } catch (err) {
     log('ERROR', 'get feed failed', { code: err.code, message: err.message });
     res.status(500).json({ error: 'Failed to fetch feed' });
