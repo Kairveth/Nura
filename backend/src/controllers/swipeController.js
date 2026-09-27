@@ -6,6 +6,14 @@ import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js'
 // Menos perfiles por día empuja a decidir con atención en vez de acumular swipes sin pensar.
 export const DAILY_SWIPE_LIMIT = 15;
 
+// Convierte las columnas internas (blocked_by, blocked_at) en dos banderas simples para el cliente:
+// nunca se expone el uuid de quién bloqueó, solo si está bloqueado y si fui yo quien lo hizo.
+const withBlockInfo = (userId) => ({ blocked_by, blocked_at, ...row }) => ({
+  ...row,
+  blocked: Boolean(blocked_at),
+  blocked_by_me: blocked_by === userId
+});
+
 export const countSwipesToday = async (userId) => {
   const { rows } = await pool.query(
     "SELECT count(*)::int AS n FROM swipes WHERE from_user_id = $1 AND created_at >= date_trunc('day', now())",
@@ -97,7 +105,8 @@ export const getMatches = async (req, res) => {
 
     const result = await pool.query(
       `SELECT m.id, m.created_at, m.created_at::text AS cursor_ts, p.user_id AS matched_user_id,
-              p.photo_url, p.description, p.age, p.location, p.neurodivergence_types AS neurotipos,
+              p.photo_url, p.description, p.age, p.location, p.neurodivergence_types AS neurotipos, p.intention,
+              m.blocked_by, m.blocked_at,
               (SELECT count(*)::int FROM messages msg
                WHERE msg.match_id = m.id AND msg.sender_id <> $1
                  AND msg.created_at > COALESCE(CASE WHEN m.user_1_id = $1 THEN m.user_1_last_read_at ELSE m.user_2_last_read_at END, '-infinity')
@@ -110,7 +119,9 @@ export const getMatches = async (req, res) => {
       values
     );
 
-    res.json(toPage(result.rows, limit));
+    const page = toPage(result.rows, limit);
+    page.data = page.data.map(withBlockInfo(userId));
+    res.json(page);
   } catch (err) {
     log('ERROR', 'get matches failed', { code: err.code, message: err.message });
     res.status(500).json({ error: 'Failed to fetch matches' });
@@ -126,7 +137,8 @@ export const getMatch = async (req, res) => {
 
     const { rows } = await pool.query(
       `SELECT m.id, m.created_at, p.user_id AS matched_user_id,
-              p.photo_url, p.description, p.age, p.location, p.neurodivergence_types AS neurotipos
+              p.photo_url, p.description, p.age, p.location, p.neurodivergence_types AS neurotipos, p.intention,
+              m.blocked_by, m.blocked_at
        FROM matches m
        JOIN profiles p ON p.user_id = CASE WHEN m.user_1_id = $1 THEN m.user_2_id ELSE m.user_1_id END
        WHERE m.id = $2 AND (m.user_1_id = $1 OR m.user_2_id = $1)`,
@@ -134,7 +146,7 @@ export const getMatch = async (req, res) => {
     );
 
     if (!rows[0]) return res.status(404).json({ error: 'Match not found' });
-    res.json(rows[0]);
+    res.json(withBlockInfo(userId)(rows[0]));
   } catch (err) {
     log('ERROR', 'get match failed', { code: err.code, message: err.message });
     res.status(500).json({ error: 'Failed to fetch match' });

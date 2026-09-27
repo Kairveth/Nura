@@ -1,25 +1,27 @@
 import pool from '../db.js';
-import { log } from '../utils/logger.js';
+import { log, audit, ipTag } from '../utils/logger.js';
 import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js';
 import { sanitizeText } from '../utils/sanitize.js';
 
 const MAX_MESSAGE_LENGTH = 2000;
+export const REPORT_REASONS = ['Comportamiento inapropiado', 'Spam o publicidad', 'Me siento inseguro/a', 'Otro'];
 
-// Confirma que el usuario es de verdad parte del match y devuelve qué lado es (1 o 2),
-// para saber qué columna de "last_read_at" le corresponde. Ningún endpoint de chat sigue sin esto.
+// Confirma que el usuario es de verdad parte del match y devuelve qué lado es (1 o 2) y si está
+// bloqueado. Ningún endpoint de chat sigue sin esto: quien no es del match nunca sabe que existe.
 const loadMembership = async (matchId, userId) => {
   if (!isUuid(matchId)) return null;
-  const { rows } = await pool.query('SELECT user_1_id, user_2_id FROM matches WHERE id = $1', [matchId]);
+  const { rows } = await pool.query('SELECT user_1_id, user_2_id, blocked_at FROM matches WHERE id = $1', [matchId]);
   const match = rows[0];
   if (!match) return null;
-  if (match.user_1_id === userId) return { side: 1, otherId: match.user_2_id };
-  if (match.user_2_id === userId) return { side: 2, otherId: match.user_1_id };
+  if (match.user_1_id === userId) return { side: 1, otherId: match.user_2_id, blocked: Boolean(match.blocked_at) };
+  if (match.user_2_id === userId) return { side: 2, otherId: match.user_1_id, blocked: Boolean(match.blocked_at) };
   return null;
 };
 
 // GET /api/matches/:matchId/messages?limit=20&cursor=<opaco>
 // Respuesta: { data: [...], next_cursor }. Orden: más recientes primero (igual que el resto de listas);
-// el cliente les da la vuelta para pintarlos de arriba hacia abajo.
+// el cliente les da la vuelta para pintarlos de arriba hacia abajo. Bloqueado = historial visible igual
+// (nada se borra), solo deja de admitir mensajes nuevos (ver createMessage).
 export const getMessages = async (req, res) => {
   try {
     const membership = await loadMembership(req.params.matchId, req.user.id);
@@ -57,6 +59,8 @@ export const createMessage = async (req, res) => {
   try {
     const membership = await loadMembership(req.params.matchId, req.user.id);
     if (!membership) return res.status(404).json({ error: 'Match not found' });
+    // Simétrico a propósito: bloqueada por cualquiera de los dos lados, ninguno puede escribir más.
+    if (membership.blocked) return res.status(403).json({ error: 'This conversation is closed' });
 
     const content = typeof req.body?.content === 'string' ? sanitizeText(req.body.content) : '';
     if (!content) return res.status(400).json({ error: 'Message cannot be empty' });
@@ -86,5 +90,45 @@ export const markRead = async (req, res) => {
   } catch (err) {
     log('ERROR', 'mark read failed', { code: err.code, message: err.message });
     res.status(500).json({ error: 'Failed to mark as read' });
+  }
+};
+
+// POST /api/matches/:matchId/block: cierra el chat para las DOS partes (nada se borra, solo deja de
+// admitir mensajes). Idempotente: bloquear dos veces no es un error.
+export const blockMatch = async (req, res) => {
+  try {
+    const membership = await loadMembership(req.params.matchId, req.user.id);
+    if (!membership) return res.status(404).json({ error: 'Match not found' });
+
+    if (!membership.blocked) {
+      await pool.query('UPDATE matches SET blocked_by = $2, blocked_at = NOW() WHERE id = $1', [req.params.matchId, req.user.id]);
+      audit('match_blocked', { match_id: req.params.matchId, user_id: req.user.id, ip: ipTag(req) });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    log('ERROR', 'block match failed', { code: err.code, message: err.message });
+    res.status(500).json({ error: 'Failed to block' });
+  }
+};
+
+// POST /api/matches/:matchId/report { reason }: registra el motivo Y bloquea a la vez (protege a
+// quien reporta al momento, sin un paso aparte).
+export const reportMatch = async (req, res) => {
+  try {
+    const membership = await loadMembership(req.params.matchId, req.user.id);
+    if (!membership) return res.status(404).json({ error: 'Match not found' });
+
+    const reason = req.body?.reason;
+    if (!REPORT_REASONS.includes(reason)) return res.status(400).json({ error: 'Invalid reason' });
+
+    await pool.query('INSERT INTO match_reports (match_id, reporter_id, reason) VALUES ($1, $2, $3)', [req.params.matchId, req.user.id, reason]);
+    if (!membership.blocked) {
+      await pool.query('UPDATE matches SET blocked_by = $2, blocked_at = NOW() WHERE id = $1', [req.params.matchId, req.user.id]);
+    }
+    audit('match_reported', { match_id: req.params.matchId, user_id: req.user.id, ip: ipTag(req) });
+    res.json({ ok: true });
+  } catch (err) {
+    log('ERROR', 'report match failed', { code: err.code, message: err.message });
+    res.status(500).json({ error: 'Failed to report' });
   }
 };
