@@ -25,6 +25,8 @@ const NEUROTIPO_OPTIONS = [
   'Prefiero no decir'
 ];
 const MAX_NEUROTIPOS = 6;
+// Debe coincidir letra a letra con INTENTIONS en backend/src/controllers/profileController.js.
+const INTENTION_OPTIONS = ['Relación', 'Amistad', 'Aún no lo sé'];
 const validAge = (v) => v !== '' && Number.isInteger(Number(v)) && Number(v) >= 18 && Number(v) <= 120;
 
 export default function ProfileCreate() {
@@ -40,7 +42,7 @@ export default function ProfileCreate() {
   const [photoError, setPhotoError] = useState('');
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState('');
-  const [form, setForm] = useState({ description: '', age: '', location: '', neurotipos: [] });
+  const [form, setForm] = useState({ description: '', age: '', location: '', neurotipos: [], intention: '' });
 
   // Si ya hay perfil, esta misma pantalla lo carga y lo edita en vez de duplicar una vista aparte.
   useEffect(() => {
@@ -54,7 +56,8 @@ export default function ProfileCreate() {
           description: res.data.description ?? '',
           age: res.data.age ?? '',
           location: res.data.location ?? '',
-          neurotipos: res.data.neurotipos ?? []
+          neurotipos: res.data.neurotipos ?? [],
+          intention: res.data.intention ?? ''
         });
         if (res.data.photo_url) setPhotoPreview(res.data.photo_url);
       })
@@ -80,7 +83,8 @@ export default function ProfileCreate() {
   const descriptionOk = form.description.trim().length > 0;
   const locationOk = form.location.trim().length > 0;
   const neurotiposOk = form.neurotipos.length > 0 && form.neurotipos.length <= MAX_NEUROTIPOS;
-  const canSubmit = Boolean(photoPreview) && descriptionOk && validAge(form.age) && locationOk && neurotiposOk && !saving && !uploading;
+  const intentionOk = INTENTION_OPTIONS.includes(form.intention);
+  const canSubmit = Boolean(photoPreview) && descriptionOk && validAge(form.age) && locationOk && neurotiposOk && intentionOk && !saving && !uploading;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -115,7 +119,7 @@ export default function ProfileCreate() {
     } catch (err) {
       setError(
         err.response?.status === 400
-          ? 'Revisa los datos: descripción hasta 200 caracteres, edad entre 18 y 120, entre 1 y 6 etiquetas.'
+          ? 'Revisa los datos: descripción hasta 200 caracteres, edad entre 18 y 120, entre 1 y 6 etiquetas, y qué buscas.'
           : 'No pudimos guardar tu perfil. Inténtalo de nuevo en un momento.'
       );
     } finally {
@@ -165,6 +169,17 @@ export default function ProfileCreate() {
               : 'Marca las que quieras, incluidas las que sospechas pero no tienes diagnosticadas.'
           }
         />
+
+        <Field as="select" label="¿Qué buscas?" name="intention" value={form.intention} onChange={handleChange} required>
+          <option value="" disabled>
+            Selecciona una opción
+          </option>
+          {INTENTION_OPTIONS.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </Field>
 
         <div role="alert" aria-live="polite" className="min-h-[1.5rem] text-sm font-semibold text-alert">
           {error}

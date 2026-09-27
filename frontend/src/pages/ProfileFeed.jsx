@@ -260,6 +260,9 @@ export default function ProfileFeed() {
                 <p className="text-xl font-semibold text-ink">
                   {profile.age} años{profile.location ? ` · ${profile.location}` : ''}
                 </p>
+                {profile.intention && (
+                  <span className="shrink-0 rounded-full border border-line px-3 py-1 text-xs font-semibold text-mute">{profile.intention}</span>
+                )}
               </div>
               <p className="mt-1 text-sm font-semibold text-mute">{(profile.neurotipos ?? []).join(' · ')}</p>
 

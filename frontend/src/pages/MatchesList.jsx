@@ -83,9 +83,11 @@ export default function MatchesList() {
                 </div>
                 <Link
                   to={`/matches/${match.id}`}
-                  className="mt-3 block h-10 w-full rounded-2xl border border-line text-center text-sm font-semibold leading-10 text-ink transition-colors duration-200 hover:border-nura focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nura"
+                  className={`mt-3 block h-10 w-full rounded-2xl border text-center text-sm font-semibold leading-10 transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nura ${
+                    match.blocked ? 'border-line text-mute' : 'border-line text-ink hover:border-nura'
+                  }`}
                 >
-                  Escribir
+                  {match.blocked ? 'Conversación cerrada' : 'Escribir'}
                 </Link>
               </li>
             ))}

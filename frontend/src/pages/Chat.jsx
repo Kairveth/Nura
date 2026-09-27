@@ -6,6 +6,14 @@ import { useAuthStore } from '../store/authStore';
 const POLL_MS = 2000;
 const MEETUP_THRESHOLD = 5; // US-010: sugerir quedar a partir de este número de mensajes
 const MAX_MESSAGE_LENGTH = 2000;
+const REPORT_REASONS = ['Comportamiento inapropiado', 'Spam o publicidad', 'Me siento inseguro/a', 'Otro'];
+// Preguntas concretas, no "¿qué tal?" vago: ayudan a arrancar sin depender de leer señales implícitas.
+const STARTERS = [
+  '¿Qué es lo primero que haces al llegar a casa?',
+  '¿Tienes algún interés al que dediques mucho tiempo?',
+  '¿Prefieres planes tranquilos o con más gente?',
+  '¿Hay algo que te gustaría que supiera de ti desde ya?'
+];
 
 // Chat es una pantalla aparte, sin la barra inferior de AppShell: aquí solo importa la conversación
 // (igual que el flujo de auth tiene su propio espacio, sin competir por la misma franja fija).
@@ -19,14 +27,17 @@ export default function Chat() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [meetupDismissed, setMeetupDismissed] = useState(() => localStorage.getItem(`meetup-dismissed-${matchId}`) === '1');
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [confirmBlock, setConfirmBlock] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [safetyBusy, setSafetyBusy] = useState(false);
+  const [safetyNotice, setSafetyNotice] = useState('');
   const listRef = useRef(null);
   const latestIdRef = useRef(null);
 
+  const loadMatch = () => client.get(`/api/swipes/matches/${matchId}`).then((res) => setMatch(res.data)).catch(() => setError('No pudimos abrir este match.'));
   useEffect(() => {
-    client
-      .get(`/api/swipes/matches/${matchId}`)
-      .then((res) => setMatch(res.data))
-      .catch(() => setError('No pudimos abrir este match.'));
+    loadMatch();
   }, [matchId]);
 
   const loadMessages = async () => {
@@ -76,10 +87,42 @@ export default function Chat() {
       setError(
         err.response?.status === 429
           ? 'Vas muy rápido. Espera un momento y vuelve a probar.'
-          : err.response?.data?.error || 'No pudimos enviar el mensaje.'
+          : err.response?.status === 403
+            ? 'Esta conversación está cerrada.'
+            : err.response?.data?.error || 'No pudimos enviar el mensaje.'
       );
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleBlock = async () => {
+    setSafetyBusy(true);
+    try {
+      await client.post(`/api/matches/${matchId}/block`);
+      await loadMatch();
+      setSafetyNotice('Has bloqueado esta conversación. Ya no podéis escribiros.');
+    } catch {
+      setSafetyNotice('No pudimos bloquear la conversación. Inténtalo de nuevo.');
+    } finally {
+      setSafetyBusy(false);
+      setConfirmBlock(false);
+      setOptionsOpen(false);
+    }
+  };
+
+  const handleReport = async (reason) => {
+    setSafetyBusy(true);
+    try {
+      await client.post(`/api/matches/${matchId}/report`, { reason });
+      await loadMatch();
+      setSafetyNotice('Gracias por avisar. Hemos bloqueado esta conversación y revisaremos tu reporte.');
+    } catch {
+      setSafetyNotice('No pudimos enviar el reporte. Inténtalo de nuevo.');
+    } finally {
+      setSafetyBusy(false);
+      setReporting(false);
+      setOptionsOpen(false);
     }
   };
 
@@ -97,15 +140,86 @@ export default function Chat() {
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold text-ink">
               {match.age} años{match.location ? ` · ${match.location}` : ''}
+              {match.intention ? ` · ${match.intention}` : ''}
             </p>
-            <p className="text-xs text-mute">{(match.neurotipos ?? []).join(' · ')}</p>
+            <p className="truncate text-xs text-mute">{(match.neurotipos ?? []).join(' · ')}</p>
           </div>
         ) : (
-          <p className="text-mute">Cargando…</p>
+          <p className="flex-1 text-mute">Cargando…</p>
         )}
+        <button
+          type="button"
+          onClick={() => {
+            setOptionsOpen((v) => !v);
+            setConfirmBlock(false);
+            setReporting(false);
+          }}
+          aria-expanded={optionsOpen}
+          aria-label="Opciones de la conversación"
+          className="shrink-0 rounded-lg px-2 py-1 text-sm font-semibold text-mute hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-nura"
+        >
+          Opciones
+        </button>
       </header>
 
-      {!meetupDismissed && messages.length >= MEETUP_THRESHOLD && (
+      {optionsOpen && !match?.blocked && (
+        <div className="mx-4 mt-3 space-y-3 rounded-2xl border border-line bg-white/80 p-4 text-sm">
+          {confirmBlock ? (
+            <>
+              <p className="text-ink">¿Seguro? Ya no podréis escribiros, pero el historial se conserva.</p>
+              <div className="flex gap-2">
+                <button type="button" disabled={safetyBusy} onClick={handleBlock} className="h-10 flex-1 rounded-2xl bg-alert text-sm font-semibold text-white disabled:opacity-50">
+                  Sí, bloquear
+                </button>
+                <button type="button" onClick={() => setConfirmBlock(false)} className="h-10 flex-1 rounded-2xl border border-line text-sm font-semibold text-ink">
+                  Cancelar
+                </button>
+              </div>
+            </>
+          ) : reporting ? (
+            <>
+              <p className="text-ink">¿Por qué reportas esta conversación? Se bloqueará a la vez.</p>
+              <div className="space-y-1">
+                {REPORT_REASONS.map((reason) => (
+                  <button
+                    key={reason}
+                    type="button"
+                    disabled={safetyBusy}
+                    onClick={() => handleReport(reason)}
+                    className="block w-full rounded-lg px-2 py-1.5 text-left text-ink hover:bg-fog disabled:opacity-50"
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
+              <button type="button" onClick={() => setReporting(false)} className="font-semibold text-mute hover:text-ink">
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={() => setConfirmBlock(true)} className="block w-full rounded-lg px-2 py-1.5 text-left font-semibold text-ink hover:bg-fog">
+                Bloquear conversación
+              </button>
+              <button type="button" onClick={() => setReporting(true)} className="block w-full rounded-lg px-2 py-1.5 text-left font-semibold text-alert hover:bg-fog">
+                Reportar
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {safetyNotice && (
+        <div role="status" className="mx-4 mt-3 rounded-2xl border border-sage bg-sage/15 p-3 text-sm font-semibold text-ink">
+          {safetyNotice}
+        </div>
+      )}
+
+      {match?.blocked && (
+        <div className="mx-4 mt-3 rounded-2xl border border-line bg-white/50 p-3 text-sm text-mute">Esta conversación está cerrada.</div>
+      )}
+
+      {!match?.blocked && !meetupDismissed && messages.length >= MEETUP_THRESHOLD && (
         <div className="mx-4 mt-3 flex items-start justify-between gap-3 rounded-2xl border border-sage bg-sage/15 p-3 text-sm text-ink">
           <p>Lleváis unos cuantos mensajes. Si os apetece, es buen momento para proponer quedar.</p>
           <button type="button" onClick={dismissMeetup} aria-label="Cerrar aviso" className="shrink-0 font-semibold text-mute hover:text-ink">
@@ -118,7 +232,23 @@ export default function Chat() {
         {loading ? (
           <p className="text-mute">Cargando…</p>
         ) : messages.length === 0 ? (
-          <p className="text-center text-mute">Todavía no hay mensajes. Escribe el primero.</p>
+          <div className="space-y-4 text-center">
+            <p className="text-mute">Todavía no hay mensajes. Elige una pregunta o escribe la tuya.</p>
+            {!match?.blocked && (
+              <div className="flex flex-wrap justify-center gap-2">
+                {STARTERS.map((starter) => (
+                  <button
+                    key={starter}
+                    type="button"
+                    onClick={() => setDraft(starter)}
+                    className="rounded-2xl border border-line bg-white/70 px-3 py-2 text-left text-sm text-ink hover:border-nura focus-visible:outline focus-visible:outline-2 focus-visible:outline-nura"
+                  >
+                    {starter}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
           messages.map((m) => (
             <div key={m.id} className={`flex ${m.sender_id === myId ? 'justify-end' : 'justify-start'}`}>
@@ -138,29 +268,34 @@ export default function Chat() {
         {error}
       </div>
 
-      <form onSubmit={handleSend} className="flex items-end gap-2 border-t border-line bg-fog/95 p-3 backdrop-blur">
-        <label className="sr-only" htmlFor="chat-draft">
-          Mensaje
-        </label>
-        <textarea
-          id="chat-draft"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) handleSend(e);
-          }}
-          placeholder="Escribe un mensaje…"
-          rows={1}
-          className="h-12 max-h-32 flex-1 resize-none rounded-2xl border border-line bg-white/70 px-4 py-3 text-base text-ink outline-none focus:border-nura focus:ring-4 focus:ring-nura/20"
-        />
-        <button
-          type="submit"
-          disabled={!draft.trim() || sending}
-          className="h-12 shrink-0 rounded-2xl bg-nura px-5 text-base font-semibold text-white transition-colors duration-200 hover:bg-nura-deep disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-nura"
-        >
-          Enviar
-        </button>
-      </form>
+      {!match?.blocked && (
+        <form onSubmit={handleSend} className="border-t border-line bg-fog/95 p-3 backdrop-blur">
+          <div className="flex items-end gap-2">
+            <label className="sr-only" htmlFor="chat-draft">
+              Mensaje
+            </label>
+            <textarea
+              id="chat-draft"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) handleSend(e);
+              }}
+              placeholder="Escribe un mensaje…"
+              rows={1}
+              className="h-12 max-h-32 flex-1 resize-none rounded-2xl border border-line bg-white/70 px-4 py-3 text-base text-ink outline-none focus:border-nura focus:ring-4 focus:ring-nura/20"
+            />
+            <button
+              type="submit"
+              disabled={!draft.trim() || sending}
+              className="h-12 shrink-0 rounded-2xl bg-nura px-5 text-base font-semibold text-white transition-colors duration-200 hover:bg-nura-deep disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-nura"
+            >
+              Enviar
+            </button>
+          </div>
+          <p className="mt-1.5 text-xs text-mute">Está bien tardar en responder. No hace falta explicarlo.</p>
+        </form>
+      )}
     </div>
   );
 }
