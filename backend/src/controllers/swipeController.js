@@ -97,7 +97,7 @@ export const getMatches = async (req, res) => {
 
     const result = await pool.query(
       `SELECT m.id, m.created_at, m.created_at::text AS cursor_ts, p.user_id AS matched_user_id,
-              p.photo_url, p.description, p.age, p.location, p.neurodivergence_type AS neurotipo,
+              p.photo_url, p.description, p.age, p.location, p.neurodivergence_types AS neurotipos,
               (SELECT count(*)::int FROM messages msg
                WHERE msg.match_id = m.id AND msg.sender_id <> $1
                  AND msg.created_at > COALESCE(CASE WHEN m.user_1_id = $1 THEN m.user_1_last_read_at ELSE m.user_2_last_read_at END, '-infinity')
@@ -126,7 +126,7 @@ export const getMatch = async (req, res) => {
 
     const { rows } = await pool.query(
       `SELECT m.id, m.created_at, p.user_id AS matched_user_id,
-              p.photo_url, p.description, p.age, p.location, p.neurodivergence_type AS neurotipo
+              p.photo_url, p.description, p.age, p.location, p.neurodivergence_types AS neurotipos
        FROM matches m
        JOIN profiles p ON p.user_id = CASE WHEN m.user_1_id = $1 THEN m.user_2_id ELSE m.user_1_id END
        WHERE m.id = $2 AND (m.user_1_id = $1 OR m.user_2_id = $1)`,

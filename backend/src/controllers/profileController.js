@@ -6,12 +6,29 @@ import { sniffImageMime, replaceProfilePhoto } from '../utils/storage.js';
 import { countSwipesToday, DAILY_SWIPE_LIMIT } from './swipeController.js';
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const MAX_NEUROTIPOS = 6; // varias etiquetas están bien (TDAH + TEA...), todas a la vez ya no informa nada
 
-// La API expone `neurotipo`; en la BD la columna es `neurodivergence_type`.
-export const NEUROTIPOS = ['TDAH', 'Autismo', 'Dislexia', 'Dispraxia', 'No diagnosticado', 'Prefiero no decir'];
-const COLUMNS = 'id, user_id, photo_url, description, age, location, neurodivergence_type AS neurotipo, created_at';
+// La API expone `neurotipos` (lista); en la BD la columna es `neurodivergence_types` (array).
+// Incluye "Neurotípico" (Nura no es solo para personas diagnosticadas) y "Sin diagnóstico formal"
+// como una etiqueta más, no un campo aparte: se marca junto a lo que se sospecha tener.
+export const NEUROTIPOS = [
+  'TDAH',
+  'TEA/Autismo',
+  'Dislexia',
+  'Discalculia',
+  'Dispraxia',
+  'PAS (Alta Sensibilidad)',
+  'AACC (Altas Capacidades)',
+  'TOC',
+  'Tourette',
+  'TLP',
+  'Neurotípico',
+  'Sin diagnóstico formal',
+  'Prefiero no decir'
+];
+const COLUMNS = 'id, user_id, photo_url, description, age, location, neurodivergence_types AS neurotipos, created_at';
 const FEED_COLUMNS = `p.id, p.user_id, p.photo_url, p.description, p.age, p.location,
-  p.neurodivergence_type AS neurotipo, p.created_at, p.created_at::text AS cursor_ts`;
+  p.neurodivergence_types AS neurotipos, p.created_at, p.created_at::text AS cursor_ts`;
 
 // Texto libre: se limpia (control, HTML) antes de validar longitud y de guardar
 const clean = (value) => (typeof value === 'string' ? sanitizeText(value) : value);
@@ -21,34 +38,43 @@ const toAge = (value) => {
   return Number.isInteger(n) && n >= 18 && n <= 120 ? n : null;
 };
 
+// Lista válida: array de strings de NEUROTIPOS, sin repetidos, 1-6 elementos. null = campo ausente.
+const validNeurotipos = (value) => {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_NEUROTIPOS) return null;
+  const unique = [...new Set(value)];
+  if (unique.length !== value.length || !unique.every((v) => NEUROTIPOS.includes(v))) return null;
+  return unique;
+};
+
 // Devuelve un mensaje de error o null. Con `partial`, solo valida los campos presentes.
-const validateProfile = ({ description, age, location, neurotipo }, { partial = false } = {}) => {
+const validateProfile = ({ description, age, location, neurotipos }, { partial = false } = {}) => {
   const missing = (v) => v === undefined || v === null || v === '';
-  if (!partial && [description, age, location, neurotipo].some(missing)) return 'Missing required fields';
+  if (!partial && [description, age, location].some(missing)) return 'Missing required fields';
+  if (!partial && neurotipos === undefined) return 'Missing required fields';
   if (!missing(description) && (typeof description !== 'string' || description.length > 200)) return 'Description max 200 chars';
   if (!missing(age) && toAge(age) === null) return 'Age must be 18-120';
   if (!missing(location) && (typeof location !== 'string' || location.length > 100)) return 'Invalid location';
-  if (!missing(neurotipo) && !NEUROTIPOS.includes(neurotipo)) return 'Invalid neurotipo';
+  if (neurotipos !== undefined && validNeurotipos(neurotipos) === null) return 'Invalid neurotipos';
   return null;
 };
 
 export const createProfile = async (req, res) => {
   try {
-    const { age, neurotipo, photo_url } = req.body ?? {};
+    const { age, neurotipos, photo_url } = req.body ?? {};
     const description = clean(req.body?.description);
     const location = clean(req.body?.location);
     const userId = req.user.id;
 
-    const error = validateProfile({ description, age, location, neurotipo });
+    const error = validateProfile({ description, age, location, neurotipos });
     if (error) return res.status(400).json({ error });
     if (photo_url !== undefined && (typeof photo_url !== 'string' || photo_url.length > 500)) {
       return res.status(400).json({ error: 'Invalid photo_url' });
     }
 
     const result = await pool.query(
-      `INSERT INTO profiles (user_id, description, age, location, neurodivergence_type, photo_url)
+      `INSERT INTO profiles (user_id, description, age, location, neurodivergence_types, photo_url)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COLUMNS}`,
-      [userId, description, toAge(age), location, neurotipo, photo_url ?? null]
+      [userId, description, toAge(age), location, validNeurotipos(neurotipos), photo_url ?? null]
     );
 
     res.status(201).json(result.rows[0]);
@@ -64,12 +90,12 @@ export const createProfile = async (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-    const { age, neurotipo, photo_url } = req.body ?? {};
+    const { age, neurotipos, photo_url } = req.body ?? {};
     const description = clean(req.body?.description);
     const location = clean(req.body?.location);
     const userId = req.user.id;
 
-    const error = validateProfile({ description, age, location, neurotipo }, { partial: true });
+    const error = validateProfile({ description, age, location, neurotipos }, { partial: true });
     if (error) return res.status(400).json({ error });
     if (photo_url !== undefined && (typeof photo_url !== 'string' || photo_url.length > 500)) {
       return res.status(400).json({ error: 'Invalid photo_url' });
@@ -85,7 +111,7 @@ export const updateProfile = async (req, res) => {
     if (description !== undefined) set('description', description);
     if (age !== undefined) set('age', toAge(age));
     if (location !== undefined) set('location', location);
-    if (neurotipo !== undefined) set('neurodivergence_type', neurotipo);
+    if (neurotipos !== undefined) set('neurodivergence_types', validNeurotipos(neurotipos));
     if (photo_url !== undefined) set('photo_url', photo_url);
 
     if (updates.length === 1) {
@@ -147,11 +173,13 @@ export const getProfile = async (req, res) => {
   }
 };
 
-// GET /api/profiles/feed?limit=10&cursor=<opaco>&age_min=&age_max=&location=&neurotipo=
+// GET /api/profiles/feed?limit=10&cursor=<opaco>&age_min=&age_max=&location=&neurotipos=TDAH&neurotipos=TEA
+// Filtra por solape: cualquier perfil que comparta AL MENOS una de las etiquetas pedidas.
 // Respuesta: { data: [...], next_cursor: "<opaco>" | null }
 export const getFeed = async (req, res) => {
   try {
-    const { age_min, age_max, location, neurotipo } = req.query;
+    const { age_min, age_max, location } = req.query;
+    const neurotipos = req.query.neurotipos === undefined ? [] : [].concat(req.query.neurotipos);
     const userId = req.user.id;
     const limit = parseLimit(req.query.limit);
     const cursor = parseCursor(req.query.cursor);
@@ -160,7 +188,9 @@ export const getFeed = async (req, res) => {
     if ((age_min && toAge(age_min) === null) || (age_max && toAge(age_max) === null)) {
       return res.status(400).json({ error: 'Age filter must be 18-120' });
     }
-    if (neurotipo && !NEUROTIPOS.includes(neurotipo)) return res.status(400).json({ error: 'Invalid neurotipo' });
+    if (neurotipos.length > 0 && !neurotipos.every((v) => NEUROTIPOS.includes(v))) {
+      return res.status(400).json({ error: 'Invalid neurotipos' });
+    }
     const cleanLocation = clean(location);
     if (cleanLocation && (typeof cleanLocation !== 'string' || cleanLocation.length > 100)) {
       return res.status(400).json({ error: 'Invalid location' });
@@ -182,7 +212,7 @@ export const getFeed = async (req, res) => {
     if (age_min) add('p.age >= ?', toAge(age_min));
     if (age_max) add('p.age <= ?', toAge(age_max));
     if (cleanLocation) add('p.location = ?', cleanLocation);
-    if (neurotipo) add('p.neurodivergence_type = ?', neurotipo);
+    if (neurotipos.length > 0) add('p.neurodivergence_types && ?::text[]', neurotipos);
 
     values.push(limit + 1);
     const result = await pool.query(
