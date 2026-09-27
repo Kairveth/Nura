@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import client from '../api/client';
 import Field from '../components/Field';
 import { useAuthStore } from '../store/authStore';
@@ -14,7 +14,6 @@ export default function Signup() {
   const [exists, setExists] = useState(false);
   const { setProgress } = useOutletContext();
   const setAuth = useAuthStore((state) => state.setAuth);
-  const navigate = useNavigate();
 
   const emailOk = EMAIL_RE.test(email);
   const passOk = password.length >= 8;
@@ -27,8 +26,10 @@ export default function Signup() {
     setLoading(true);
     try {
       const res = await client.post('/api/auth/signup', { email, password });
-      setAuth(res.data.user, res.data.token);
-      navigate('/profile/create');
+      // Sin navigate() aquí: App.jsx decide el destino a partir de isAuthenticated + justSignedUp.
+      // Llamar a navigate() a la vez que cambia la sesión competía con esa redirección reactiva
+      // (una sobrescribía a la otra) y a veces acababa en /dashboard en vez de /profile/create.
+      setAuth(res.data.user, res.data.token, { justSignedUp: true });
     } catch (err) {
       if (err.response?.status === 409) {
         setExists(true);
