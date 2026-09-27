@@ -21,6 +21,7 @@ cd frontend && npm run build                     # debe compilar sin errores
 - Gestor oficial: **npm** (lockfiles `package-lock.json`). Bun está instalado en la máquina pero **no** se usa en el proyecto: no generes `bun.lock` ni mezcles gestores.
 - **El esquema real de la BD es la fuente de verdad** (ids UUID; nombres distintos a los de la especificación). Está descrito en `migrations/000_baseline_schema.sql` (local, no versionada); la API mantiene su contrato (`neurotipos` como array, `action`). Antes de escribir SQL, comprueba las columnas reales. Las migraciones locales (`003` a `009`) ya están aplicadas; una BD nueva las necesita todas, en orden, para que la app funcione.
 - **La lista de `NEUROTIPOS` está duplicada** en `backend/src/controllers/profileController.js`, `frontend/src/pages/ProfileCreate.jsx` y `frontend/src/pages/ProfileFeed.jsx` (no hay código compartido entre backend y frontend). Si añades o quitas una etiqueta, cámbiala en los tres, letra a letra.
+- **`COMPLEMENTARY_PAIRS`** (backend `utils/affinity.js`, frontend `ProfileFeed.jsx`) también duplicada. Antes de añadir un par nuevo, pide confirmación: son afirmaciones sobre qué combinaciones "encajan bien", y conviene que las revise una persona, no solo el código. TLP queda fuera a propósito.
 - Entorno: copia `backend/.env.example` → `backend/.env` y `frontend/.env.example` → `frontend/.env.local`. El backend no arranca sin `JWT_SECRET` y `DATABASE_URL`.
 
 ## 3. Estructura y dónde va cada cosa

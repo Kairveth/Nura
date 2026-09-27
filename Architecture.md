@@ -180,6 +180,28 @@ del límite de 3/hora por IP (compartido entre `forgot-password` y `reset-passwo
 activas, no solo la que hizo el cambio). Mismo error genérico (`Invalid or expired token`) para token
 inexistente, ya usado o caducado.
 
+### Afinidad (`utils/affinity.js`)
+
+Diferenciador deliberado frente a Tinder/Bumble: no es un algoritmo de recomendación (fuera del
+scope del MVP), es un **reordenado transparente** de la página que ya se iba a mostrar.
+
+- `getFeed` calcula la página exactamente igual que siempre (cursor, filtros, `next_cursor` incluido)
+  y **solo después** reordena el array `data` ya decidido: nunca decide quién aparece, solo en qué
+  orden dentro de esa página. El cursor se calcula sobre el orden cronológico original, así que nadie
+  se salta ni se repite entre páginas (probado con paginación de 1 en 1).
+- Puntos: +2 por cada etiqueta de neurotipo compartida, +3 por pareja complementaria
+  (`COMPLEMENTARY_PAIRS`: TDAH↔TEA/Autismo, AACC↔TDAH, PAS↔TEA/Autismo — lista corta a propósito,
+  mejor pocas afirmaciones defendibles que muchas inventadas). "Sin diagnóstico formal" y "Prefiero
+  no decir" no cuentan para nada, ni como igual ni como pareja. TLP no tiene pareja complementaria:
+  las dinámicas de relación ahí son un tema clínico serio, no un rasgo que "encaje bien" con otro.
+- Con jitter aleatorio (`Math.random() * 2.5`) sobre la puntuación antes de ordenar: dos personas con
+  la misma puntuación no siempre salen en el mismo orden, y alguien con menos puntos a veces se cuela
+  antes. Deliberado ("química accidental"): no queremos un ranking 100% predecible.
+- El texto del chip (`ProfileFeed.jsx`, `compatChips`) es independiente: nunca se envía una
+  puntuación por la API, el frontend calcula su propio texto literal a partir de los mismos datos
+  (`neurotipos`, edad, ubicación) que ya recibía. La lista `COMPLEMENTARY_PAIRS` está duplicada ahí
+  (mismo patrón que `NEUROTIPOS`): cualquier cambio va en los dos sitios.
+
 ## 4. Frontend
 
 - **Rutas:** un único `<BrowserRouter>` con dos ramas protegidas por layout (`RequireAuth`, `RedirectIfAuthed`), no dos árboles de router condicionales. Sin sesión → `/` (registro) y `/login` bajo `AuthLayout`; con sesión → `/dashboard`, `/profile/create`, `/feed`, `/matches`, todas bajo `AppShell`.

@@ -38,6 +38,8 @@ Detalle en `Especificacion/02-user-personas.md`.
 
 **Diferencia deliberada frente a Tinder y apps similares:** un tope de 15 valoraciones al día (aplicado en el servidor, no solo en la interfaz), un perfil a la vez en vez de una pila, y señales de compatibilidad literales (etiquetas de neurotipo compartidas, misma ubicación, edad parecida) en lugar de una puntuación o un porcentaje. El objetivo es menos matches pero más reales, no maximizar el tiempo en la app.
 
+**Afinidad, no algoritmo:** dentro de la página que ya se iba a mostrar (nunca decide quién aparece, ni oculta a nadie), se reordena hacia parejas que la comunidad neurodivergente suele describir como compatibles (p. ej. TDAH + TEA/Autismo), con un margen de aleatoriedad deliberado para dejar sitio a la conexión que no sigue ninguna regla. Detalle técnico y la lista completa de parejas en `Architecture.md`.
+
 **Neurotipo es de varias etiquetas, no una sola:** la realidad es interseccional (TDAH + TEA + sospecha de AACC sin diagnosticar es un perfil real, no una excepción) y Nura tampoco es solo para personas diagnosticadas — por eso la lista incluye "Neurotípico" y "Sin diagnóstico formal" como etiquetas más, no como excepciones aparte.
 
 ## 5. Alcance del MVP
