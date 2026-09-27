@@ -73,6 +73,7 @@ Ids según `Especificacion/03-user-stories.md`.
 | US-010 | Recomendación de quedar | Banner discreto, una sola vez, se puede cerrar | Pendiente |
 | US-011 | Indicador de mensajes nuevos | Badge que desaparece al leer | Pendiente |
 | US-012 | Borrar mi cuenta | Doble confirmación, borrado en cascada | Pendiente |
+| — | Olvidé mi contraseña | Email con enlace de un solo uso, caduca en 30 min | Hecho (Resend, dominio de pruebas) |
 | US-013 | Descargar mis datos | JSON con perfil, chats y matches | Pendiente |
 | US-014 | Landing | Hero + 3 puntos, responsive | Pendiente |
 

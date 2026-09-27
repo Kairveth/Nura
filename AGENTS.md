@@ -108,10 +108,11 @@ Especificación cumplida ✓ · checklist de seguridad ✓ · build y pruebas ma
 **Siguiente, por prioridad:**
 1. Cerrar la **deuda de seguridad** pendiente (lista local, no versionada: `Seguridad/PENDIENTES.local.md`).
 2. ~~UI de perfil con foto y descripción~~ — hecho (`ProfileCreate`, sirve para crear y editar).
-3. UI de feed y swipe (`ProfileFeed`, `MatchesList`) — pocos perfiles por sesión, sin scroll infinito — US-005 a US-008.
-4. Chat 1:1 con polling de 2 s y recomendación de quedar — US-009 a US-011.
-5. Ajustes: exportar y borrar cuenta (GDPR) — US-012/013; verificación de email.
-6. Landing — US-014.
+3. ~~Olvidé mi contraseña~~ — hecho (Resend, dominio de pruebas: solo entrega a la cuenta dueña de la API key).
+4. UI de feed y swipe (`ProfileFeed`, `MatchesList`) — pocos perfiles por sesión, sin scroll infinito — US-005 a US-008.
+5. Chat 1:1 con polling de 2 s y recomendación de quedar — US-009 a US-011.
+6. Ajustes: exportar y borrar cuenta (GDPR) — US-012/013; verificación de email.
+7. Landing — US-014.
 
 ## 11. Cuando dudes
 

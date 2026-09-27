@@ -68,6 +68,8 @@ Las rutas autenticadas añaden `authMiddleware` (JWT + `token_version`) y `userL
 | GET | `/api/profiles/feed` | JWT | Perfiles aún no valorados, con filtros. **Paginado por cursor** |
 | GET | `/api/profiles/:userId` | JWT | Perfil por id |
 | POST | `/api/auth/logout-all` | JWT | Restablece **todas** las sesiones del usuario |
+| POST | `/api/auth/forgot-password` | — (rate limit 3/h) | Siempre responde igual; si la cuenta existe, envía email |
+| POST | `/api/auth/reset-password` | — (rate limit 3/h) | Token de un solo uso (hash en BD), 30 min |
 | POST | `/api/swipes` | JWT | Registra sí/no; el match se crea en BD si es mutuo |
 | GET | `/api/swipes/matches` | JWT | Matches del usuario con los datos del otro. **Paginado por cursor** |
 | GET | `/health` | — | Comprobación de vida |
@@ -135,6 +137,19 @@ las hace el backend con la **service key** (`SUPABASE_SERVICE_KEY`, nunca en el 
 - La URL pública pasa por el CDN de Supabase (`cache-control: max-age=300`): tras reemplazar una
   foto, la anterior puede seguir sirviéndose desde caché hasta 5 min aunque el origen ya la borró.
   Nunca se vuelve a devolver esa URL, así que no hay forma de encontrarla salvo tenerla ya guardada.
+
+### Recuperar contraseña
+
+`POST /forgot-password { email }` responde **siempre** el mismo mensaje genérico (exista o no la
+cuenta): solo el email delata si funcionó. Si existe, genera un token aleatorio de 32 bytes, guarda
+solo su SHA-256 en `users.reset_token_hash` (caduca en 30 min) y lo manda por email (`utils/email.js`,
+Resend vía fetch directo, sin SDK). Enfriamiento de 2 min por cuenta para no repetir envíos, además
+del límite de 3/hora por IP (compartido entre `forgot-password` y `reset-password`).
+
+`POST /reset-password { token, password }` busca por el hash, comprueba que no haya caducado, cambia
+`password_hash`, **limpia el token** (un solo uso) y sube `token_version` (cierra todas las sesiones
+activas, no solo la que hizo el cambio). Mismo error genérico (`Invalid or expired token`) para token
+inexistente, ya usado o caducado.
 
 ## 4. Frontend
 
