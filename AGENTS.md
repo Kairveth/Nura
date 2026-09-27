@@ -82,6 +82,7 @@ Sigue `Design_System.md`. Resumen:
 - **Toda pantalla autenticada nueva va bajo `AppShell`** (la barra inferior fija), nunca con su propio header/logo. Misma navegación en todas partes = predecible. Única excepción hasta ahora: `Chat.jsx` (una conversación necesita el alto completo); cualquier otra excepción se justifica igual de explícitamente, no por comodidad.
 - **Nunca un enlace o botón que lleve a una función que no existe.** Si algo no está construido (como el chat), dilo con un estado deshabilitado y honesto ("disponible pronto"), no con un clic que no lleva a ningún sitio.
 - **Sin porcentajes ni puntuaciones de compatibilidad.** Solo hechos literales que el usuario pueda verificar (etiquetas de neurotipo en común, misma ciudad…). Nada que huela a algoritmo de recomendación oculto.
+- **Nunca `window.confirm()`/`alert()` para acciones irreversibles.** Un panel inline, plegado, con su propia confirmación en el sitio (patrón "Opciones" del chat: bloquear/reportar). Explica el efecto ANTES de que sea tarde para arrepentirse.
 - Copy en español, literal, voz activa. Errores: qué pasó + cómo arreglarlo. Sin urgencia, sin sarcasmo, sin prometer nada fuera del MVP.
 
 ## 7. Flujo de trabajo por tipo de tarea
@@ -116,8 +117,10 @@ Especificación cumplida ✓ · checklist de seguridad ✓ · build y pruebas ma
 3. ~~Olvidé mi contraseña~~ — hecho (Resend, dominio de pruebas: solo entrega a la cuenta dueña de la API key).
 4. ~~UI de feed y swipe~~ — hecho (`ProfileFeed`, `MatchesList`, tope de 15 swipes/día, señales de compatibilidad literales).
 5. ~~Chat 1:1 con polling de 2 s y recomendación de quedar~~ — hecho (`Chat.jsx`, US-009 a US-011).
-6. Ajustes: exportar y borrar cuenta (GDPR) — US-012/013; verificación de email.
-7. Landing — US-014.
+6. ~~Afinidad, intención, bloquear/reportar, frases para romper el hielo~~ — hecho.
+7. Fotos en el chat — bloqueado hasta ahora a propósito (necesitaba bloquear/reportar primero, ya hecho). Requiere *bucket* **privado** en Supabase Storage (no el público de fotos de perfil).
+8. Ajustes: exportar y borrar cuenta (GDPR) — US-012/013; verificación de email.
+9. Landing — US-014.
 
 ## 11. Cuando dudes
 

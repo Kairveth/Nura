@@ -38,6 +38,8 @@ Detalle en `Especificacion/02-user-personas.md`.
 
 **Diferencia deliberada frente a Tinder y apps similares:** un tope de 15 valoraciones al día (aplicado en el servidor, no solo en la interfaz), un perfil a la vez en vez de una pila, y señales de compatibilidad literales (etiquetas de neurotipo compartidas, misma ubicación, edad parecida) en lugar de una puntuación o un porcentaje. El objetivo es menos matches pero más reales, no maximizar el tiempo en la app.
 
+**Ayudar sin señalar a nadie:** el chat da un empujón para abrirse (preguntas concretas para tocar e insertar, nunca enviadas solas; una línea recordando que tardar en responder está bien) sin presentarlo como "ayuda para neurodivergentes" — funciona igual, sin distinguir, para cualquiera que se relacione distinto. El badge de "sin leer" solo lo ve quien recibe: nadie sabe si ya se leyó su mensaje, así que no hay presión de responder rápido.
+
 **Afinidad, no algoritmo:** dentro de la página que ya se iba a mostrar (nunca decide quién aparece, ni oculta a nadie), se reordena hacia parejas que la comunidad neurodivergente suele describir como compatibles (p. ej. TDAH + TEA/Autismo), con un margen de aleatoriedad deliberado para dejar sitio a la conexión que no sigue ninguna regla. Detalle técnico y la lista completa de parejas en `Architecture.md`.
 
 **Neurotipo es de varias etiquetas, no una sola:** la realidad es interseccional (TDAH + TEA + sospecha de AACC sin diagnosticar es un perfil real, no una excepción) y Nura tampoco es solo para personas diagnosticadas — por eso la lista incluye "Neurotípico" y "Sin diagnóstico formal" como etiquetas más, no como excepciones aparte.
@@ -71,6 +73,7 @@ Ids según `Especificacion/03-user-stories.md`.
 | US-002 | Iniciar sesión | JWT 1 h, logout limpia sesión | Hecho (sesión en memoria, no persiste al recargar) |
 | US-003 | Crear perfil | 1 foto + 200 caracteres, vista previa | Hecho (foto en Supabase Storage) |
 | US-004 | Editar perfil | Cambios visibles al momento | Hecho (misma pantalla que US-003, detecta perfil existente) |
+| — | Intención ("qué buscas") | Relación / Amistad / Aún no lo sé, una sola opción | Hecho — pedido por la persona de Carlos ("intención explícita") |
 | US-005 | Ver otros perfiles | Foto, descripción, edad y tipo legibles | Hecho, un perfil a la vez |
 | US-006 | Filtrar | Edad, ubicación, tipo; sin filtro = todos | Hecho, panel de filtros plegado por defecto |
 | US-007 | Swipe sí/no | Botones grandes, literal ("Pasar" / "Me interesa") | Hecho, con tope de 15 al día |
@@ -78,6 +81,8 @@ Ids según `Especificacion/03-user-stories.md`.
 | US-009 | Chat 1:1 | Historial, mensajes en 0–3 s (polling 2 s) | Hecho |
 | US-010 | Recomendación de quedar | Banner discreto, una sola vez, se puede cerrar | Hecho (a partir de 5 mensajes) |
 | US-011 | Indicador de mensajes nuevos | Badge que desaparece al leer | Hecho |
+| — | Bloquear y reportar | Cierra el chat para las dos partes; reportar registra el motivo | Hecho — base de seguridad antes de admitir fotos en el chat |
+| — | Frases para romper el hielo | Preguntas concretas, tocar para insertar (nunca se envían solas) | Hecho, en chats sin mensajes todavía |
 | US-012 | Borrar mi cuenta | Doble confirmación, borrado en cascada | Pendiente |
 | — | Olvidé mi contraseña | Email con enlace de un solo uso, caduca en 30 min | Hecho (Resend, dominio de pruebas) |
 | US-013 | Descargar mis datos | JSON con perfil, chats y matches | Pendiente |

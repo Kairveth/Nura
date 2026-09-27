@@ -76,6 +76,8 @@ Las rutas autenticadas añaden `authMiddleware` (JWT + `token_version`) y `userL
 | GET | `/api/matches/:matchId/messages` | JWT | Historial del chat. **Paginado por cursor** |
 | POST | `/api/matches/:matchId/messages` | JWT (10/min) | Envía un mensaje (2000 car. máx.) |
 | POST | `/api/matches/:matchId/read` | JWT | Marca el chat como leído (baja el badge) |
+| POST | `/api/matches/:matchId/block` | JWT | Cierra el chat para las dos partes (idempotente) |
+| POST | `/api/matches/:matchId/report` | JWT | Registra el motivo Y bloquea a la vez |
 | GET | `/health` | — | Comprobación de vida |
 
 ### Paginación (contrato de las listas)
@@ -109,6 +111,17 @@ match no existe, responde **404** en los dos casos por igual (no delata si el ma
 - Sin WebSocket: el frontend hace polling cada 2 s mientras la pestaña está visible
   (`!document.hidden`), tal y como fija `CLAUDE.md`.
 
+### Bloquear y reportar (base de seguridad antes de admitir fotos en el chat)
+
+`matches.blocked_by` / `blocked_at` (migración `010`): **simétrico**, cierra el chat para las dos
+partes por igual, no solo para quien lo activó — `createMessage` lo comprueba y devuelve 403;
+`getMessages` sigue funcionando (el historial no se borra). `getMatches`/`getMatch` nunca exponen el
+uuid de quién bloqueó, solo `blocked` y `blocked_by_me` (calculados en `withBlockInfo`).
+
+Reportar (`match_reports`: `match_id`, `reporter_id`, `reason`, lista cerrada en `REPORT_REASONS`)
+bloquea a la vez — protege a quien reporta sin un paso aparte. Bloquear solo (sin reportar) también
+existe, para "ya no quiero hablar" sin necesidad de alegar un motivo.
+
 ### Tope diario de swipes (calidad sobre cantidad)
 
 `DAILY_SWIPE_LIMIT = 15` (`swipeController.js`). `createSwipe` cuenta los swipes de hoy del usuario
@@ -136,6 +149,8 @@ PostgreSQL con `users`, `profiles`, `swipes`, `matches` y `messages` (esta últi
 **Match mutuo:** no hay trigger en la BD. `POST /api/swipes` lo crea dentro de una **transacción con bloqueo por pareja** (`pg_advisory_xact_lock`): si dos personas se dan "sí" a la vez, la segunda espera a la primera y no se pierde ningún match ni se duplica. La pareja se guarda en orden canónico (id menor primero). La API expone `neurotipos` (array) aunque la columna se llame distinto (`neurodivergence_types`).
 
 **Neurotipo, de una opción a varias (migración `009`):** alguien puede ser TDAH + TEA + AACC sin diagnóstico formal a la vez, y hay usuarios neurotípicos en Nura, no solo diagnosticados. `neurodivergence_types` es un `text[]` (antes `varchar` escalar), con índice `GIN` para el filtro por solape. Lista cerrada de 13 etiquetas en `NEUROTIPOS` (`profileController.js`) — incluye "Neurotípico" y "Sin diagnóstico formal" como una etiqueta más, no un campo aparte. Máximo 6 etiquetas por perfil (más deja de informar). La lista está **duplicada literalmente** en `ProfileCreate.jsx` y `ProfileFeed.jsx` (sin backend/frontend compartido): cualquier cambio va en los tres sitios a la vez.
+
+**Intención (migración `010`):** `profiles.intention`, escalar (una sola opción: `Relación`, `Amistad`, `Aún no lo sé` — `INTENTIONS` en `profileController.js`), a diferencia de `neurotipos`. Se muestra en la tarjeta del feed, en la lista de matches y en la cabecera del chat.
 
 ### Variables de entorno
 

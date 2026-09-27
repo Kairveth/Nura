@@ -85,6 +85,12 @@ Un perfil a la vez, nunca una pila. Foto arriba (`aspect-[4/5]`), datos y descri
 ### Burbujas de chat (`Chat.jsx`)
 Propias a la derecha, relleno `nura` y texto blanco; del otro a la izquierda, borde `line` sobre blanco translúcido. Sin avatares repetidos en cada burbuja (ya está el nombre en la cabecera). El aviso de "considera quedar" (US-010) usa `sage`, igual que el banner de match del feed: mismo tono para "esto es bueno, tranquilo" en toda la app.
 
+### Frases para romper el hielo
+Cuando un chat no tiene mensajes: preguntas concretas y literales (nunca "¿qué tal?" vago) como botones que **rellenan** el cuadro de escribir, jamás lo envían solos — la persona siempre decide y puede editar antes de mandar. Debajo del cuadro, siempre visible: "Está bien tardar en responder. No hace falta explicarlo." — normaliza la pausa en el propio texto de la interfaz, sin necesidad de una función aparte. Ninguna de las dos cosas se presenta como "ayuda para neurodivergentes": funciona igual para cualquiera.
+
+### Bloquear y reportar
+Un botón de texto "Opciones" en la cabecera del chat abre un panel plegado (no un `confirm()` del navegador) con dos acciones, cada una con su propia confirmación en el sitio: bloquear pide "¿Seguro?" antes de cerrar el chat; reportar pide el motivo (lista cerrada) antes de mandarlo. El texto explica el efecto en el momento ("ya no podréis escribiros", "se bloqueará a la vez"), nunca después de que ya sea tarde para arrepentirse. Bloqueada, la conversación se aviso con un mensaje neutro ("Esta conversación está cerrada") y el cuadro de escribir desaparece del todo — no se deja ahí deshabilitado invitando a intentarlo.
+
 ### Mensaje de error
 Zona `role="alert"` con `aria-live="polite"`, texto `alert` 600. Dice **qué pasó y cómo arreglarlo**, sin disculpas vagas.
 
