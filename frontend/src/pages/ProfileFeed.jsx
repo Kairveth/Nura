@@ -1,19 +1,36 @@
 import { useEffect, useState } from 'react';
 import client from '../api/client';
 import Field from '../components/Field';
+import CheckboxGroup from '../components/CheckboxGroup';
 import { useAuthStore } from '../store/authStore';
 
 const PAGE_SIZE = 10;
-const NEUROTIPO_OPTIONS = ['TDAH', 'Autismo', 'Dislexia', 'Dispraxia', 'No diagnosticado', 'Prefiero no decir'];
+// Debe coincidir letra a letra con NEUROTIPOS en backend/src/controllers/profileController.js.
+const NEUROTIPO_OPTIONS = [
+  'TDAH',
+  'TEA/Autismo',
+  'Dislexia',
+  'Discalculia',
+  'Dispraxia',
+  'PAS (Alta Sensibilidad)',
+  'AACC (Altas Capacidades)',
+  'TOC',
+  'Tourette',
+  'TLP',
+  'Neurotípico',
+  'Sin diagnóstico formal',
+  'Prefiero no decir'
+];
 const validAge = (v) => v !== '' && Number.isInteger(Number(v)) && Number(v) >= 18 && Number(v) <= 120;
-const hasFilters = (f) => Object.values(f).some(Boolean);
+const hasFilters = (f) => Boolean(f.age_min || f.age_max || f.location || f.neurotipos.length > 0);
 
 // Señales de compatibilidad, calculadas aquí mismo (no hay algoritmo de recomendación en el MVP):
 // hechos literales, nunca un porcentaje ni una puntuación. Máximo 2, para no saturar la tarjeta.
 const compatChips = (mine, card) => {
   if (!mine) return [];
   const chips = [];
-  if (mine.neurotipo && card.neurotipo === mine.neurotipo) chips.push(`Mismo neurotipo: ${card.neurotipo}`);
+  const shared = (mine.neurotipos ?? []).filter((t) => (card.neurotipos ?? []).includes(t));
+  if (shared.length > 0) chips.push(`Comparte: ${shared.join(', ')}`);
   if (mine.location && card.location && mine.location.trim().toLowerCase() === card.location.trim().toLowerCase()) {
     chips.push(`Misma ubicación: ${card.location}`);
   }
@@ -36,7 +53,7 @@ export default function ProfileFeed() {
   const [error, setError] = useState('');
   const [matchBanner, setMatchBanner] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState({ age_min: '', age_max: '', location: '', neurotipo: '' });
+  const [filters, setFilters] = useState({ age_min: '', age_max: '', location: '', neurotipos: [] });
 
   useEffect(() => {
     client.get(`/api/profiles/${userId}`).then((res) => setMyProfile(res.data)).catch(() => {});
@@ -62,11 +79,10 @@ export default function ProfileFeed() {
     setError('');
     try {
       const params = new URLSearchParams({ limit: PAGE_SIZE });
-      Object.entries(filters).forEach(([key, value]) => {
-        if (!value) return;
-        if ((key === 'age_min' || key === 'age_max') && !validAge(value)) return;
-        params.append(key, value);
-      });
+      if (filters.age_min && validAge(filters.age_min)) params.append('age_min', filters.age_min);
+      if (filters.age_max && validAge(filters.age_max)) params.append('age_max', filters.age_max);
+      if (filters.location) params.append('location', filters.location);
+      filters.neurotipos.forEach((t) => params.append('neurotipos', t));
       if (cursor) params.append('cursor', cursor);
 
       const res = await client.get(`/api/profiles/feed?${params}`);
@@ -113,7 +129,7 @@ export default function ProfileFeed() {
     }
   };
 
-  const clearFilters = () => setFilters({ age_min: '', age_max: '', location: '', neurotipo: '' });
+  const clearFilters = () => setFilters({ age_min: '', age_max: '', location: '', neurotipos: [] });
   const dailyLimitReached = swipesToday >= dailyLimit;
   const profile = profiles[currentIndex];
 
@@ -167,14 +183,13 @@ export default function ProfileFeed() {
             value={filters.location}
             onChange={(e) => setFilters((f) => ({ ...f, location: e.target.value }))}
           />
-          <Field as="select" label="Tipo de neurodivergencia" name="neurotipo" value={filters.neurotipo} onChange={(e) => setFilters((f) => ({ ...f, neurotipo: e.target.value }))}>
-            <option value="">Todos</option>
-            {NEUROTIPO_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </Field>
+          <CheckboxGroup
+            label="Mostrar solo quien comparta alguna de estas etiquetas"
+            options={NEUROTIPO_OPTIONS}
+            value={filters.neurotipos}
+            onChange={(neurotipos) => setFilters((f) => ({ ...f, neurotipos }))}
+            hint="Sin marcar ninguna, se muestran todos los perfiles."
+          />
           {hasFilters(filters) && (
             <button type="button" onClick={clearFilters} className="text-sm font-semibold text-mute underline underline-offset-4 hover:text-ink">
               Quitar filtros
@@ -226,7 +241,7 @@ export default function ProfileFeed() {
                   {profile.age} años{profile.location ? ` · ${profile.location}` : ''}
                 </p>
               </div>
-              <p className="mt-1 text-sm font-semibold text-mute">{profile.neurotipo}</p>
+              <p className="mt-1 text-sm font-semibold text-mute">{(profile.neurotipos ?? []).join(' · ')}</p>
 
               {compatChips(myProfile, profile).length > 0 && (
                 <ul className="mt-3 flex flex-wrap gap-2">

@@ -98,7 +98,7 @@ export default function Chat() {
             <p className="truncate font-semibold text-ink">
               {match.age} años{match.location ? ` · ${match.location}` : ''}
             </p>
-            <p className="text-xs text-mute">{match.neurotipo}</p>
+            <p className="text-xs text-mute">{(match.neurotipos ?? []).join(' · ')}</p>
           </div>
         ) : (
           <p className="text-mute">Cargando…</p>

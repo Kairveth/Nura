@@ -4,8 +4,27 @@ import { useAuthStore } from '../store/authStore';
 import client from '../api/client';
 import Field from '../components/Field';
 import PhotoField from '../components/PhotoField';
+import CheckboxGroup from '../components/CheckboxGroup';
 
-const NEUROTIPO_OPTIONS = ['TDAH', 'Autismo', 'Dislexia', 'Dispraxia', 'No diagnosticado', 'Prefiero no decir'];
+// Debe coincidir letra a letra con NEUROTIPOS en backend/src/controllers/profileController.js.
+// Incluye "Neurotípico" (Nura no es solo para diagnosticados) y "Sin diagnóstico formal" como una
+// etiqueta más para marcar junto a lo que se sospecha tener, no un campo aparte.
+const NEUROTIPO_OPTIONS = [
+  'TDAH',
+  'TEA/Autismo',
+  'Dislexia',
+  'Discalculia',
+  'Dispraxia',
+  'PAS (Alta Sensibilidad)',
+  'AACC (Altas Capacidades)',
+  'TOC',
+  'Tourette',
+  'TLP',
+  'Neurotípico',
+  'Sin diagnóstico formal',
+  'Prefiero no decir'
+];
+const MAX_NEUROTIPOS = 6;
 const validAge = (v) => v !== '' && Number.isInteger(Number(v)) && Number(v) >= 18 && Number(v) <= 120;
 
 export default function ProfileCreate() {
@@ -21,7 +40,7 @@ export default function ProfileCreate() {
   const [photoError, setPhotoError] = useState('');
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState('');
-  const [form, setForm] = useState({ description: '', age: '', location: '', neurotipo: '' });
+  const [form, setForm] = useState({ description: '', age: '', location: '', neurotipos: [] });
 
   // Si ya hay perfil, esta misma pantalla lo carga y lo edita en vez de duplicar una vista aparte.
   useEffect(() => {
@@ -35,7 +54,7 @@ export default function ProfileCreate() {
           description: res.data.description ?? '',
           age: res.data.age ?? '',
           location: res.data.location ?? '',
-          neurotipo: res.data.neurotipo ?? ''
+          neurotipos: res.data.neurotipos ?? []
         });
         if (res.data.photo_url) setPhotoPreview(res.data.photo_url);
       })
@@ -60,7 +79,8 @@ export default function ProfileCreate() {
 
   const descriptionOk = form.description.trim().length > 0;
   const locationOk = form.location.trim().length > 0;
-  const canSubmit = Boolean(photoPreview) && descriptionOk && validAge(form.age) && locationOk && form.neurotipo && !saving && !uploading;
+  const neurotiposOk = form.neurotipos.length > 0 && form.neurotipos.length <= MAX_NEUROTIPOS;
+  const canSubmit = Boolean(photoPreview) && descriptionOk && validAge(form.age) && locationOk && neurotiposOk && !saving && !uploading;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -95,7 +115,7 @@ export default function ProfileCreate() {
     } catch (err) {
       setError(
         err.response?.status === 400
-          ? 'Revisa los datos: descripción hasta 200 caracteres, edad entre 18 y 120.'
+          ? 'Revisa los datos: descripción hasta 200 caracteres, edad entre 18 y 120, entre 1 y 6 etiquetas.'
           : 'No pudimos guardar tu perfil. Inténtalo de nuevo en un momento.'
       );
     } finally {
@@ -134,16 +154,17 @@ export default function ProfileCreate() {
 
         <Field label="Ubicación" name="location" placeholder="Ciudad o región" value={form.location} onChange={handleChange} required />
 
-        <Field as="select" label="Tipo de neurodivergencia" name="neurotipo" value={form.neurotipo} onChange={handleChange} required>
-          <option value="" disabled>
-            Selecciona una opción
-          </option>
-          {NEUROTIPO_OPTIONS.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </Field>
+        <CheckboxGroup
+          label="¿Cómo te describes? (marca las que apliquen)"
+          options={NEUROTIPO_OPTIONS}
+          value={form.neurotipos}
+          onChange={(neurotipos) => setForm((prev) => ({ ...prev, neurotipos }))}
+          hint={
+            form.neurotipos.length >= MAX_NEUROTIPOS
+              ? `Máximo ${MAX_NEUROTIPOS} etiquetas.`
+              : 'Marca las que quieras, incluidas las que sospechas pero no tienes diagnosticadas.'
+          }
+        />
 
         <div role="alert" aria-live="polite" className="min-h-[1.5rem] text-sm font-semibold text-alert">
           {error}
