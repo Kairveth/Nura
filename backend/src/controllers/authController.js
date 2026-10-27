@@ -158,13 +158,17 @@ export const forgotPassword = async (req, res) => {
       );
 
       const link = `${(process.env.FRONTEND_URL || 'http://localhost:3000').split(',')[0]}/reset-password?token=${token}`;
-      const sent = await sendEmail({
+      // Sin await: esperar al envío hacía que la respuesta tardara cientos de ms más SOLO si la cuenta
+      // existe, y midiendo el tiempo se enumeraban emails pese al mensaje genérico. Se envía en segundo plano.
+      const ip = ipTag(req);
+      sendEmail({
         to: user.email,
         subject: 'Restablece tu contraseña de Nura',
         html: `<p>Pediste restablecer tu contraseña. Este enlace caduca en ${RESET_TOKEN_MINUTES} minutos y solo sirve una vez.</p><p><a href="${link}">${link}</a></p><p>Si no fuiste tú, ignora este correo: tu contraseña sigue igual.</p>`
-      });
-      audit(sent ? 'password_reset_requested' : 'password_reset_email_failed', { user_id: user.id, ip: ipTag(req) });
+      }).then((sent) => audit(sent ? 'password_reset_requested' : 'password_reset_email_failed', { user_id: user.id, ip }));
     } else {
+      // Mismo trabajo en BD que la rama de arriba (un UPDATE), para que el tiempo no distinga los casos
+      await pool.query('UPDATE users SET reset_requested_at = reset_requested_at WHERE id = $1', [crypto.randomUUID()]);
       audit('password_reset_unknown_or_cooldown', { ip: ipTag(req) });
     }
 

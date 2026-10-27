@@ -6,6 +6,8 @@ import sharp from 'sharp';
 // así que un nombre aleatorio es la única puerta — no hay enumeración posible (comprobado a mano).
 const BUCKET = 'profile-photos';
 const MIME_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png' };
+// Sin límite, un Storage colgado deja cada petición esperando para siempre y se acumulan hasta agotar el servidor
+export const EXTERNAL_TIMEOUT_MS = 10_000;
 
 const base = () => process.env.SUPABASE_URL;
 const authHeaders = (contentType) => ({
@@ -44,6 +46,7 @@ export const cleanImage = async (buffer, mime) => {
 export const replaceProfilePhoto = async (userId, buffer, mime, previousUrl) => {
   const path = `${userId}/${crypto.randomUUID()}.${MIME_EXT[mime]}`;
   const res = await fetch(`${base()}/storage/v1/object/${BUCKET}/${path}`, {
+    signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
     method: 'POST',
     headers: authHeaders(mime),
     body: buffer
@@ -70,7 +73,8 @@ export const isOwnPhotoUrl = (userId, url) => {
 export const deleteProfilePhoto = async (url) => {
   const path = url?.split(`/object/public/${BUCKET}/`)[1];
   if (!path) return;
-  const res = await fetch(`${base()}/storage/v1/object/${BUCKET}/${path}`, { method: 'DELETE', headers: authHeaders() });
+  const res = await fetch(`${base()}/storage/v1/object/${BUCKET}/${path}`, {
+    signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS), method: 'DELETE', headers: authHeaders() });
   if (!res.ok && res.status !== 404) throw new Error(`storage delete failed: ${res.status}`);
 };
 
@@ -78,6 +82,7 @@ export const deleteProfilePhoto = async (url) => {
 // y nunca guardada en el perfil, o una antigua cuyo borrado best-effort falló, también son suyas.
 export const deleteUserPhotos = async (userId) => {
   const list = await fetch(`${base()}/storage/v1/object/list/${BUCKET}`, {
+    signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
     method: 'POST',
     headers: { ...authHeaders(), 'content-type': 'application/json' },
     body: JSON.stringify({ prefix: `${userId}/`, limit: 1000 })
@@ -87,6 +92,7 @@ export const deleteUserPhotos = async (userId) => {
   if (prefixes.length === 0) return;
 
   const res = await fetch(`${base()}/storage/v1/object/${BUCKET}`, {
+    signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
     method: 'DELETE',
     headers: { ...authHeaders(), 'content-type': 'application/json' },
     body: JSON.stringify({ prefixes })

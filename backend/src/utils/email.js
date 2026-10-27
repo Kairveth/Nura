@@ -14,10 +14,13 @@ export const sendEmail = async ({ to, subject, html }) => {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ from: FROM, to, subject, html })
+      body: JSON.stringify({ from: FROM, to, subject, html }),
+      signal: AbortSignal.timeout(10_000) // un proveedor colgado no puede dejar peticiones esperando para siempre
     });
     if (!res.ok) {
-      log('ERROR', 'sendEmail failed', { status: res.status, body: await res.text() });
+      // Solo el tipo de error: el cuerpo de Resend puede repetir la dirección de destino (PII en los logs)
+      const name = await res.json().then((b) => b?.name).catch(() => undefined);
+      log('ERROR', 'sendEmail failed', { status: res.status, name });
       return false;
     }
     return true;
