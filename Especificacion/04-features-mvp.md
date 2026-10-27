@@ -12,7 +12,7 @@
 | Chat UI | P0 | 10h | TBD | - |
 | Landing page | P0 | 6h | TBD | - |
 | Responsive design | P0 | 4h | TBD | - |
-| Settings (profile delete, data download) | P1 | 4h | TBD | - |
+| Settings (profile delete, data download) | P1 | 4h | TBD | Done (`/settings`) |
 
 **Total Frontend: ~54h**
 
@@ -28,8 +28,8 @@
 | Password hashing (bcrypt) | P0 | 2h | TBD | - |
 | Rate limiting | P0 | 3h | TBD | - |
 | Input sanitization | P0 | 3h | TBD | - |
-| Data export (GDPR) | P1 | 4h | TBD | - |
-| Account deletion | P1 | 2h | TBD | - |
+| Data export (GDPR) | P1 | 4h | TBD | Done (`GET /api/account/export`) |
+| Account deletion | P1 | 2h | TBD | Done (`POST /api/account/delete`) |
 
 **Total Backend: ~40h**
 

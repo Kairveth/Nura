@@ -44,10 +44,10 @@
 ## Seguridad (User perspective)
 
 **US-012:** Como usuario, puedo borrar mi cuenta y todos mis datos.
-- Aceptación: botón en settings, doble confirm, datos borrados 24h después
+- Aceptación: botón en Ajustes, doble confirmación (lista de lo que se borra + contraseña), borrado inmediato y definitivo. Se borran también los matches y las conversaciones completas, incluidos los mensajes de la otra persona.
 
 **US-013:** Como usuario, puedo descargar mis datos (GDPR).
-- Aceptación: JSON con perfil, chats, matches, email enviado en 24h
+- Aceptación: descarga directa de un JSON con cuenta, perfil, swipes, matches, mensajes enviados y reportes propios. Sin datos de otras personas y sin envío por email.
 
 ## Landing
 

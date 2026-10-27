@@ -78,6 +78,8 @@ Las rutas autenticadas añaden `authMiddleware` (JWT + `token_version`) y `userL
 | POST | `/api/matches/:matchId/read` | JWT | Marca el chat como leído (baja el badge) |
 | POST | `/api/matches/:matchId/block` | JWT | Cierra el chat para las dos partes (idempotente) |
 | POST | `/api/matches/:matchId/report` | JWT | Registra el motivo Y bloquea a la vez |
+| GET | `/api/account/export` | JWT | JSON con los datos propios (US-013), sin datos de terceros |
+| POST | `/api/account/delete` | JWT + contraseña (5/15 min por usuario) | Borra la cuenta al momento (US-012); `204`, o `403` si la contraseña no coincide |
 | GET | `/health` | — | Comprobación de vida |
 
 ### Paginación (contrato de las listas)
@@ -122,6 +124,24 @@ Reportar (`match_reports`: `match_id`, `reporter_id`, `reason`, lista cerrada en
 bloquea a la vez — protege a quien reporta sin un paso aparte. Bloquear solo (sin reportar) también
 existe, para "ya no quiero hablar" sin necesidad de alegar un motivo.
 
+### Exportar y borrar la cuenta (GDPR, `accountController.js`)
+
+**Exportar** (`GET /api/account/export`): devuelve `account` (id, email, alta), `profile`, `swipes` dados,
+`matches` (id, fecha, `blocked_by_me`), `messages_sent` y `reports_filed`. Solo datos **propios**: ni el
+perfil ni los mensajes de la otra persona. Nunca sale nada de seguridad (`password_hash`, `token_version`,
+bloqueos, token de reset). El frontend lo descarga como `nura-mis-datos-AAAA-MM-DD.json`.
+
+**Borrar** (`POST /api/account/delete`, body `{ password }`): pide la contraseña aunque haya sesión (un
+token robado o una pestaña abierta no bastan) y responde **403**, no 401, si no coincide: `api/client.js`
+cierra la sesión ante cualquier 401. `swipes`, `matches`, `messages.sender_id` y `matches.blocked_by`
+apuntan a `users` **sin** `ON DELETE CASCADE`, así que un `DELETE FROM users` a secas falla por FK. Orden,
+en una transacción: `matches` (arrastra `messages` y `match_reports`) → `swipes` (en los dos sentidos) →
+`users` (arrastra `profiles`). Decisiones de producto: borrado **inmediato** (sin periodo de gracia) y
+conversaciones borradas **enteras**, también para la otra persona. Tras el `COMMIT` se borra la carpeta
+`{userId}/` entera de Storage (`deleteUserPhotos`), no solo la foto del perfil: una foto subida y nunca
+guardada, o una antigua cuyo borrado falló, también es del usuario. Si falla Storage, la cuenta ya está
+borrada y se registra el `user_id` para limpiar a mano.
+
 ### Tope diario de swipes (calidad sobre cantidad)
 
 `DAILY_SWIPE_LIMIT = 15` (`swipeController.js`). `createSwipe` cuenta los swipes de hoy del usuario
@@ -142,7 +162,9 @@ técnico: por eso se aplica en el servidor y no solo en la interfaz, para que no
 
 ### Datos
 
-PostgreSQL con `users`, `profiles`, `swipes`, `matches` y `messages` (esta última pendiente). Reglas de negocio en BD: unicidad de swipe por par, borrado en cascada al eliminar usuario y match automático cuando ambos dicen sí. Consultas siempre parametrizadas (`$1`, `$2`…).
+PostgreSQL con `users`, `profiles`, `swipes`, `matches`, `messages` y `match_reports`. Reglas de negocio en BD: unicidad de swipe por par. Solo `profiles`, `messages` (vía `matches`) y `match_reports` borran en cascada; `swipes` y `matches` no, por eso borrar una cuenta va tabla a tabla (ver "Exportar y borrar la cuenta"). Consultas siempre parametrizadas (`$1`, `$2`…).
+
+**API REST de Supabase cerrada (migración `011`):** Nura no usa PostgREST ni Supabase Auth; el backend entra como `postgres` (omite RLS). Las 6 tablas tienen RLS activo y `anon`/`authenticated` no tienen ningún permiso de tabla, secuencia ni función en `public` (también por *default privileges*, para las tablas futuras creadas por `postgres`). **Toda tabla nueva** lleva `ENABLE ROW LEVEL SECURITY` en su migración: Supabase concede por defecto permisos a `anon` en cada tabla nueva de `public`.
 
 **Índices** (migración local `003`, aplicada): el orden base `(created_at DESC, id DESC)` y cada filtro del feed (tipo, ubicación) combinado con ese orden, más edad; en `matches`, por usuario y orden; en `messages`, por match y orden (chat). Se eliminaron los redundantes que ya cubren las restricciones `UNIQUE`. Comprobar con `EXPLAIN ANALYZE`.
 
@@ -219,7 +241,8 @@ scope del MVP), es un **reordenado transparente** de la página que ya se iba a 
 
 ## 4. Frontend
 
-- **Rutas:** un único `<BrowserRouter>` con dos ramas protegidas por layout (`RequireAuth`, `RedirectIfAuthed`), no dos árboles de router condicionales. Sin sesión → `/` (registro) y `/login` bajo `AuthLayout`; con sesión → `/dashboard`, `/profile/create`, `/feed`, `/matches`, todas bajo `AppShell`.
+- **Rutas:** un único `<BrowserRouter>` con dos ramas protegidas por layout (`RequireAuth`, `RedirectIfAuthed`), no dos árboles de router condicionales. Sin sesión → `/` (registro) y `/login` bajo `AuthLayout`; con sesión → `/dashboard`, `/profile/create`, `/feed`, `/matches`, `/settings`, todas bajo `AppShell`.
+- **Ajustes (`Settings.jsx`, `/settings`):** sin pestaña propia (la barra se queda en 4); se entra desde el enlace "Ajustes" de Perfil. Tres bloques: descargar mis datos (único botón relleno), cerrar todas las sesiones (`logout-all`) y borrar mi cuenta. Borrar tiene un segundo paso en la propia pantalla, sin `window.confirm`: lista literal de lo que se borra + contraseña; mientras dura, los otros dos bloques se ocultan. Tras borrar, una pantalla "Cuenta borrada" confirma lo que pasó antes de salir.
 - **Navegación autenticada (`AppShell.jsx`):** una barra inferior fija con 4 pestañas (Inicio, Descubrir, Matches, Perfil), igual en las cuatro pantallas y con el mismo lenguaje visual (subrayado en `nura`) que el selector de Crear cuenta/Entrar de `AuthLayout`. Nada de menús que aparecen y desaparecen: "dónde estoy" se ve siempre igual.
 - **Señales de compatibilidad (`ProfileFeed.jsx`):** calculadas en el cliente comparando el propio perfil con cada tarjeta (etiquetas de neurotipo en común —cualquier solape, no las mismas exactas—, misma ubicación, edad parecida ≤3 años). Se muestran como hechos literales, nunca como una puntuación o un porcentaje; no hay backend ni algoritmo de recomendación detrás.
 - **Chat (`Chat.jsx`, ruta `/matches/:matchId`):** deliberadamente fuera de `AppShell` (excepción, igual que `AuthLayout`): una conversación necesita el alto completo, no compartir la franja fija con la barra de navegación. Carga el match por `GET /api/swipes/matches/:matchId` (funciona también al recargar o entrar por enlace directo, no solo navegando desde la lista), hace polling cada 2 s solo con la pestaña visible, marca como leído al abrir y muestra el aviso de US-010 una vez superados 5 mensajes (se recuerda cerrado en `localStorage`, por match).

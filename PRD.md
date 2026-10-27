@@ -83,9 +83,9 @@ Ids según `Especificacion/03-user-stories.md`.
 | US-011 | Indicador de mensajes nuevos | Badge que desaparece al leer | Hecho |
 | — | Bloquear y reportar | Cierra el chat para las dos partes; reportar registra el motivo | Hecho — base de seguridad antes de admitir fotos en el chat |
 | — | Frases para romper el hielo | Preguntas concretas, tocar para insertar (nunca se envían solas) | Hecho, en chats sin mensajes todavía |
-| US-012 | Borrar mi cuenta | Doble confirmación, borrado en cascada | Pendiente |
+| US-012 | Borrar mi cuenta | Doble confirmación con contraseña, borrado inmediato de todo (también las conversaciones) | Hecho (`/settings`) |
 | — | Olvidé mi contraseña | Email con enlace de un solo uso, caduca en 30 min | Hecho (Resend, dominio de pruebas) |
-| US-013 | Descargar mis datos | JSON con perfil, chats y matches | Pendiente |
+| US-013 | Descargar mis datos | JSON con perfil, matches y mensajes propios, descarga directa | Hecho (`/settings`) |
 | US-014 | Landing | Hero + 3 puntos, responsive | Pendiente |
 
 ## 7. Requisitos no funcionales

@@ -51,6 +51,8 @@ cd frontend && npm run build                     # debe compilar sin errores
 - **Nunca** subas al repo: `.env*` (salvo `.env.example`), claves y certificados, dumps o backups de BD, `migrations/`, `backend/logs.txt`, `node_modules`, ni nada de herramientas de agentes (`CLAUDE.md`, `.claude/`, `.agents/`, `skills-lock.json`).
 - **Nunca** uses `git add .` ni `git add -A`: añade por rutas (`git add backend`). Hay un hook local `.git/hooks/pre-commit` que bloquea ficheros sensibles y diffs con cadenas de conexión o claves; no lo saltes (`--no-verify`).
 - Consultas SQL **siempre parametrizadas** (`$1`, `$2`…); jamás interpolar entrada del usuario.
+- **Toda `CREATE TABLE`** en una migración lleva `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` (sin políticas: solo el backend, que entra como `postgres`, accede). Supabase da permisos a `anon` en cada tabla nueva de `public`, y la clave anon es pública. Comprobarlo con esa clave: `GET`/`POST /rest/v1/<tabla>` → `42501`.
+- Al añadir una tabla con datos de un usuario: inclúyela en `exportData` (si son datos suyos) y en el orden de borrado de `deleteAccount` (`accountController.js`) si no borra en cascada.
 - **Valida en el servidor** tipo, formato y longitud de toda entrada (el frontend es solo comodidad).
 - Las respuestas de la API **no devuelven** `password_hash`, emails de otros usuarios ni campos internos.
 - Los logs no incluyen contraseñas, emails, tokens, contenido de mensajes ni PII: solo `user_id`, acción y hora.
@@ -119,7 +121,7 @@ Especificación cumplida ✓ · checklist de seguridad ✓ · build y pruebas ma
 5. ~~Chat 1:1 con polling de 2 s y recomendación de quedar~~ — hecho (`Chat.jsx`, US-009 a US-011).
 6. ~~Afinidad, intención, bloquear/reportar, frases para romper el hielo~~ — hecho.
 7. Fotos en el chat — bloqueado hasta ahora a propósito (necesitaba bloquear/reportar primero, ya hecho). Requiere *bucket* **privado** en Supabase Storage (no el público de fotos de perfil).
-8. Ajustes: exportar y borrar cuenta (GDPR) — US-012/013; verificación de email.
+8. ~~Ajustes: exportar y borrar cuenta (GDPR) — US-012/013~~ — hecho (`Settings.jsx`, `/api/account/*`). Sigue pendiente la verificación de email.
 9. Landing — US-014.
 
 ## 11. Cuando dudes
