@@ -170,10 +170,15 @@ export const uploadPhoto = async (req, res) => {
   }
 };
 
+// GET /api/profiles/:userId — SOLO el perfil propio. Los perfiles ajenos llegan por el feed (los que aún
+// no has valorado) o por tus matches. Servir cualquier id dejaba a quien fue bloqueado seguir consultando
+// el perfil actualizado (ubicación incluida) de quien le bloqueó. Otro id = 404, como si no existiera.
 export const getProfile = async (req, res) => {
   try {
     const { userId } = req.params;
-    if (!isUuid(userId)) return res.status(404).json({ error: 'Profile not found' });
+    if (!isUuid(userId) || userId.toLowerCase() !== String(req.user.id).toLowerCase()) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
 
     const result = await pool.query(`SELECT ${COLUMNS} FROM profiles WHERE user_id = $1`, [userId]);
 
