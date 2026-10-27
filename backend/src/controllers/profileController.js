@@ -2,7 +2,7 @@ import pool from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js';
 import { sanitizeText } from '../utils/sanitize.js';
-import { sniffImageMime, cleanImage, replaceProfilePhoto } from '../utils/storage.js';
+import { sniffImageMime, cleanImage, replaceProfilePhoto, isOwnPhotoUrl } from '../utils/storage.js';
 import { countSwipesToday, DAILY_SWIPE_LIMIT } from './swipeController.js';
 import { sortByAffinity } from '../utils/affinity.js';
 
@@ -73,7 +73,7 @@ export const createProfile = async (req, res) => {
 
     const error = validateProfile({ description, age, location, neurotipos, intention });
     if (error) return res.status(400).json({ error });
-    if (photo_url !== undefined && (typeof photo_url !== 'string' || photo_url.length > 500)) {
+    if (photo_url !== undefined && !isOwnPhotoUrl(userId, photo_url)) {
       return res.status(400).json({ error: 'Invalid photo_url' });
     }
 
@@ -103,7 +103,7 @@ export const updateProfile = async (req, res) => {
 
     const error = validateProfile({ description, age, location, neurotipos, intention }, { partial: true });
     if (error) return res.status(400).json({ error });
-    if (photo_url !== undefined && (typeof photo_url !== 'string' || photo_url.length > 500)) {
+    if (photo_url !== undefined && !isOwnPhotoUrl(userId, photo_url)) {
       return res.status(400).json({ error: 'Invalid photo_url' });
     }
 

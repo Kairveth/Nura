@@ -55,6 +55,16 @@ export const replaceProfilePhoto = async (userId, buffer, mime, previousUrl) => 
   return `${base()}/storage/v1/object/public/${BUCKET}/${path}`;
 };
 
+// La única photo_url válida es la que devolvió POST /api/profiles/photo para ESTE usuario: su carpeta,
+// nombre UUID, extensión jpg/png. Cualquier otra URL permitiría un píxel espía (cada persona que viera el
+// perfil cargaría una imagen de un servidor ajeno y le dejaría su IP y la hora), usar la foto de otro
+// usuario o saltarse la limpieza y los límites de la subida.
+const PHOTO_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png)$/;
+export const isOwnPhotoUrl = (userId, url) => {
+  const prefix = `${base()}/storage/v1/object/public/${BUCKET}/${userId}/`;
+  return typeof url === 'string' && url.startsWith(prefix) && PHOTO_NAME.test(url.slice(prefix.length));
+};
+
 // Borra una foto por su URL pública. Sin URL (o una que no es de este bucket) no hace nada.
 // Devuelve la promesa: quien llama decide si espera (borrar cuenta) o no (reemplazar foto).
 export const deleteProfilePhoto = async (url) => {
