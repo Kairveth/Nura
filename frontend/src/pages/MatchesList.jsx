@@ -69,7 +69,7 @@ export default function MatchesList() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-ink">
-                        {match.age} años{match.location ? ` · ${match.location}` : ''}
+                        {match.profile_hidden ? 'Perfil no disponible' : `${match.age} años${match.location ? ` · ${match.location}` : ''}`}
                       </p>
                       {match.unread_count > 0 && (
                         <span className="rounded-full bg-nura px-2 py-0.5 text-xs font-semibold text-white" aria-label={`${match.unread_count} mensajes sin leer`}>
