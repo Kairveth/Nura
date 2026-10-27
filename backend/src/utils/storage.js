@@ -34,12 +34,36 @@ export const replaceProfilePhoto = async (userId, buffer, mime, previousUrl) => 
   });
   if (!res.ok) throw new Error(`storage upload failed: ${res.status} ${await res.text()}`);
 
-  if (previousUrl) {
-    const prevPath = previousUrl.split(`/object/public/${BUCKET}/`)[1];
-    if (prevPath) {
-      fetch(`${base()}/storage/v1/object/${BUCKET}/${prevPath}`, { method: 'DELETE', headers: authHeaders() }).catch(() => {});
-    }
-  }
+  deleteProfilePhoto(previousUrl).catch(() => {});
 
   return `${base()}/storage/v1/object/public/${BUCKET}/${path}`;
+};
+
+// Borra una foto por su URL pública. Sin URL (o una que no es de este bucket) no hace nada.
+// Devuelve la promesa: quien llama decide si espera (borrar cuenta) o no (reemplazar foto).
+export const deleteProfilePhoto = async (url) => {
+  const path = url?.split(`/object/public/${BUCKET}/`)[1];
+  if (!path) return;
+  const res = await fetch(`${base()}/storage/v1/object/${BUCKET}/${path}`, { method: 'DELETE', headers: authHeaders() });
+  if (!res.ok && res.status !== 404) throw new Error(`storage delete failed: ${res.status}`);
+};
+
+// Borra TODAS las fotos del usuario (carpeta `<userId>/`), no solo la del perfil: una foto subida
+// y nunca guardada en el perfil, o una antigua cuyo borrado best-effort falló, también son suyas.
+export const deleteUserPhotos = async (userId) => {
+  const list = await fetch(`${base()}/storage/v1/object/list/${BUCKET}`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'content-type': 'application/json' },
+    body: JSON.stringify({ prefix: `${userId}/`, limit: 1000 })
+  });
+  if (!list.ok) throw new Error(`storage list failed: ${list.status}`);
+  const prefixes = (await list.json()).map((obj) => `${userId}/${obj.name}`);
+  if (prefixes.length === 0) return;
+
+  const res = await fetch(`${base()}/storage/v1/object/${BUCKET}`, {
+    method: 'DELETE',
+    headers: { ...authHeaders(), 'content-type': 'application/json' },
+    body: JSON.stringify({ prefixes })
+  });
+  if (!res.ok) throw new Error(`storage delete failed: ${res.status}`);
 };

@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.js';
 import profileRoutes from './routes/profile.js';
 import swipeRoutes from './routes/swipe.js';
 import messageRoutes from './routes/messages.js';
+import accountRoutes from './routes/account.js';
 
 const required = ['JWT_SECRET', 'DATABASE_URL', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY'];
 if (process.env.NODE_ENV === 'production') required.push('FRONTEND_URL'); // CORS estricto: sin origen no se arranca
@@ -42,6 +43,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/profiles', profileRoutes);
 app.use('/api/swipes', swipeRoutes);
 app.use('/api/matches', messageRoutes);
+app.use('/api/account', accountRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
