@@ -193,6 +193,36 @@ export const getProfile = async (req, res) => {
   }
 };
 
+// Tope de perfiles SERVIDOS al día (no solo valorados): sin él, el feed se recorría con el cursor sin hacer
+// ningún swipe y se bajaba a todos los usuarios con su neurotipo (dato de salud). 10x el tope de swipes:
+// de sobra para valorar 15 y cambiar de filtros varias veces; un scraper se queda en 150 por cuenta y día.
+export const FEED_DAILY_CAP = DAILY_SWIPE_LIMIT * 10;
+
+// Reserva en UNA sentencia y devuelve cuántos perfiles puede servir esta petición. `FOR UPDATE` bloquea la
+// fila del usuario: peticiones en paralelo esperan su turno y no pueden pasarse del tope entre las dos.
+// El contador se reinicia solo al cambiar de día (UTC).
+const reserveFeedQuota = async (userId, wanted) => {
+  const { rows } = await pool.query(
+    `WITH cur AS (
+       SELECT CASE WHEN feed_served_on = CURRENT_DATE THEN feed_served_count ELSE 0 END AS used
+       FROM users WHERE id = $1 FOR UPDATE
+     ), g AS (
+       SELECT used, LEAST($2::int, GREATEST(0, $3::int - used)) AS granted FROM cur
+     )
+     UPDATE users u SET feed_served_count = g.used + g.granted, feed_served_on = CURRENT_DATE
+     FROM g WHERE u.id = $1
+     RETURNING g.granted`,
+    [userId, wanted, FEED_DAILY_CAP]
+  );
+  return rows[0]?.granted ?? 0;
+};
+
+const refundFeedQuota = (userId, unused) =>
+  pool.query(
+    'UPDATE users SET feed_served_count = GREATEST(0, feed_served_count - $2) WHERE id = $1 AND feed_served_on = CURRENT_DATE',
+    [userId, unused]
+  );
+
 // GET /api/profiles/feed?limit=10&cursor=<opaco>&age_min=&age_max=&location=&neurotipos=TDAH&neurotipos=TEA
 // Filtra por solape: cualquier perfil que comparta AL MENOS una de las etiquetas pedidas.
 // Respuesta: { data: [...], next_cursor: "<opaco>" | null }
@@ -234,7 +264,13 @@ export const getFeed = async (req, res) => {
     if (cleanLocation) add('p.location = ?', cleanLocation);
     if (neurotipos.length > 0) add('p.neurodivergence_types && ?::text[]', neurotipos);
 
-    values.push(limit + 1);
+    const swipesToday = await countSwipesToday(userId);
+    const granted = await reserveFeedQuota(userId, limit);
+    if (granted === 0) {
+      return res.json({ data: [], next_cursor: null, feed_limit_reached: true, swipes_today: swipesToday, daily_limit: DAILY_SWIPE_LIMIT });
+    }
+
+    values.push(granted + 1);
     const result = await pool.query(
       `SELECT ${FEED_COLUMNS} FROM profiles p
        WHERE ${where.join(' AND ')}
@@ -243,8 +279,9 @@ export const getFeed = async (req, res) => {
       values
     );
 
-    const swipesToday = await countSwipesToday(userId);
-    const page = toPage(result.rows, limit); // el cursor sale de aquí, con el orden cronológico real
+    const page = toPage(result.rows, granted); // el cursor sale de aquí, con el orden cronológico real
+    // Solo cuenta lo que de verdad se sirvió: una página corta (fin del feed, filtros estrechos) devuelve el resto
+    if (page.data.length < granted) await refundFeedQuota(userId, granted - page.data.length);
 
     // Reordena SOLO esta página ya decidida hacia mayor afinidad (nunca oculta ni salta a nadie:
     // ver utils/affinity.js). Si el perfil propio no existe todavía, se enseña en orden normal.

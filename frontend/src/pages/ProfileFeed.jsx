@@ -67,6 +67,7 @@ export default function ProfileFeed() {
   const [nextCursor, setNextCursor] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [swipesToday, setSwipesToday] = useState(0);
+  const [feedLimitReached, setFeedLimitReached] = useState(false);
   const [dailyLimit, setDailyLimit] = useState(15);
   const [loading, setLoading] = useState(true);
   const [swiping, setSwiping] = useState(false);
@@ -108,6 +109,7 @@ export default function ProfileFeed() {
       const res = await client.get(`/api/profiles/feed?${params}`);
       setProfiles(res.data.data);
       setNextCursor(res.data.next_cursor);
+      setFeedLimitReached(Boolean(res.data.feed_limit_reached));
       setSwipesToday(res.data.swipes_today);
       setDailyLimit(res.data.daily_limit);
       setCurrentIndex(0);
@@ -234,6 +236,11 @@ export default function ProfileFeed() {
         <div className="rounded-2xl border border-line bg-white/50 p-6 text-center">
           <p className="font-semibold text-ink">Ya viste tus {dailyLimit} perfiles de hoy.</p>
           <p className="mt-2 text-sm text-mute">Vuelve mañana con la cabeza despejada: así decides mejor, no más rápido.</p>
+        </div>
+      ) : feedLimitReached ? (
+        <div className="rounded-2xl border border-line bg-white/50 p-6 text-center">
+          <p className="font-semibold text-ink">Has visto muchos perfiles por hoy.</p>
+          <p className="mt-2 text-sm text-mute">Vuelve mañana: verás perfiles nuevos y cada uno tendrá tu atención.</p>
         </div>
       ) : !profile ? (
         <div className="rounded-2xl border border-line bg-white/50 p-6 text-center">
