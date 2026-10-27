@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import client from '../api/client';
 import Field from '../components/Field';
@@ -194,9 +194,14 @@ export default function ProfileCreate() {
         </button>
 
         {existing && (
-          <button type="button" onClick={logout} className="text-sm font-semibold text-mute underline underline-offset-4 hover:text-ink">
-            Cerrar sesión
-          </button>
+          <div className="flex gap-6">
+            <Link to="/settings" className="text-sm font-semibold text-mute underline underline-offset-4 hover:text-ink">
+              Ajustes
+            </Link>
+            <button type="button" onClick={logout} className="text-sm font-semibold text-mute underline underline-offset-4 hover:text-ink">
+              Cerrar sesión
+            </button>
+          </div>
         )}
       </form>
     </div>
