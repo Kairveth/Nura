@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import sharp from 'sharp';
 
 // Sube fotos de perfil a Supabase Storage con la service key (nunca expuesta al navegador).
 // El bucket es público solo para LECTURA por URL directa; listar/escribir exige la service key,
@@ -18,6 +19,21 @@ export const sniffImageMime = (buffer) => {
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
   if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
   return null;
+};
+
+// Las fotos del móvil traen EXIF con las coordenadas GPS de dónde se hicieron (a menudo, la casa de la
+// persona), y la URL de la foto es pública. Se vuelve a codificar la imagen en vez de borrar bloques a mano:
+// sale sin NINGÚN metadato (EXIF, GPS, XMP, comentarios) ni datos escondidos tras la imagen. `rotate()`
+// aplica antes la orientación del EXIF para que la foto no salga girada al perderla. `limitInputPixels`
+// corta las bombas de descompresión (pocos KB que se expanden a gigapíxeles y tumban el proceso).
+const MAX_INPUT_PIXELS = 40_000_000; // ~ una foto de 48 MP recortada; de sobra para un móvil actual
+const MAX_SIDE = 1600; // la foto nunca se muestra más grande: menos peso y nada de originales a resolución completa
+
+export const cleanImage = async (buffer, mime) => {
+  const image = sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' })
+    .rotate()
+    .resize({ width: MAX_SIDE, height: MAX_SIDE, fit: 'inside', withoutEnlargement: true });
+  return mime === 'image/png' ? image.png().toBuffer() : image.jpeg({ quality: 85, mozjpeg: true }).toBuffer();
 };
 
 // Borra la foto anterior del usuario (si la había) y sube la nueva bajo un nombre aleatorio.

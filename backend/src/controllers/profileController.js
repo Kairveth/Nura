@@ -2,7 +2,7 @@ import pool from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js';
 import { sanitizeText } from '../utils/sanitize.js';
-import { sniffImageMime, replaceProfilePhoto } from '../utils/storage.js';
+import { sniffImageMime, cleanImage, replaceProfilePhoto } from '../utils/storage.js';
 import { countSwipesToday, DAILY_SWIPE_LIMIT } from './swipeController.js';
 import { sortByAffinity } from '../utils/affinity.js';
 
@@ -152,8 +152,16 @@ export const uploadPhoto = async (req, res) => {
     const mime = sniffImageMime(req.file.buffer);
     if (!mime) return res.status(400).json({ error: 'Photo must be JPEG or PNG' });
 
+    let clean;
+    try {
+      clean = await cleanImage(req.file.buffer, mime);
+    } catch {
+      // Cabecera de JPEG/PNG pero contenido corrupto, truncado o demasiado grande al descomprimir
+      return res.status(400).json({ error: 'Photo could not be processed' });
+    }
+
     const existing = await pool.query('SELECT photo_url FROM profiles WHERE user_id = $1', [req.user.id]);
-    const photo_url = await replaceProfilePhoto(req.user.id, req.file.buffer, mime, existing.rows[0]?.photo_url);
+    const photo_url = await replaceProfilePhoto(req.user.id, clean, mime, existing.rows[0]?.photo_url);
 
     res.status(201).json({ photo_url });
   } catch (err) {
