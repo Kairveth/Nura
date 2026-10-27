@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import pool from '../db.js';
 import { log, audit, ipTag } from '../utils/logger.js';
 import { sendEmail } from '../utils/email.js';
+import { reportsBeforeDeletion } from '../utils/reportedAccounts.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 8;
@@ -52,6 +53,10 @@ export const signup = async (req, res) => {
 
     const user = result.rows[0];
     audit('signup_ok', { user_id: user.id, ip: ipTag(req) });
+    // Vuelve alguien cuya cuenta anterior se borró con reportes en contra: solo se registra para revisarlo
+    // (no hay moderación automática); la respuesta al cliente es la misma para no delatar nada.
+    const priorReports = await reportsBeforeDeletion(email).catch(() => 0);
+    if (priorReports > 0) audit('signup_reported_returning', { user_id: user.id, prior_reports: priorReports, ip: ipTag(req) });
 
     res.status(201).json({ user, token: signToken(user) });
   } catch (err) {

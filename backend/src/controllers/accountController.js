@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import pool from '../db.js';
 import { log, audit, ipTag } from '../utils/logger.js';
 import { deleteUserPhotos } from '../utils/storage.js';
+import { rememberIfReported } from '../utils/reportedAccounts.js';
 
 const MAX_PASSWORD_BYTES = 72; // mismo tope que authController (bcrypt ignora lo que pase de 72 bytes)
 
@@ -66,16 +67,18 @@ export const deleteAccount = async (req, res) => {
 
   const client = await pool.connect();
   try {
-    const user = await client.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    const user = await client.query('SELECT email, password_hash FROM users WHERE id = $1', [userId]);
     if (!user.rows[0] || !(await bcrypt.compare(password, user.rows[0].password_hash))) {
       audit('account_delete_denied', { user_id: userId, ip: ipTag(req) });
       return res.status(403).json({ error: 'Incorrect password' });
     }
 
     // swipes, matches y messages.sender_id apuntan a users SIN cascada: un DELETE de users a secas
-    // falla por FK. Orden: matches (arrastra messages y match_reports), swipes, y por último users
-    // (arrastra profiles). Se borran las conversaciones enteras, también para la otra persona.
+    // falla por FK. Orden: matches (arrastra messages), swipes, y por último users (arrastra profiles).
+    // Se borran las conversaciones enteras, también para la otra persona. Los reportes NO se borran
+    // (match_id/reporter_id pasan a NULL, migración 013): borrar la cuenta no puede borrar las pruebas.
     await client.query('BEGIN');
+    await rememberIfReported(client, userId, user.rows[0].email);
     await client.query('DELETE FROM matches WHERE user_1_id = $1 OR user_2_id = $1', [userId]);
     await client.query('DELETE FROM swipes WHERE from_user_id = $1 OR to_user_id = $1', [userId]);
     await client.query('DELETE FROM users WHERE id = $1', [userId]);

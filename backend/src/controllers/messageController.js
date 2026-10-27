@@ -121,7 +121,11 @@ export const reportMatch = async (req, res) => {
     const reason = req.body?.reason;
     if (!REPORT_REASONS.includes(reason)) return res.status(400).json({ error: 'Invalid reason' });
 
-    await pool.query('INSERT INTO match_reports (match_id, reporter_id, reason) VALUES ($1, $2, $3)', [req.params.matchId, req.user.id, reason]);
+    // reported_user_id sin FK: el reporte sobrevive aunque la persona reportada borre su cuenta (migración 013)
+    await pool.query(
+      'INSERT INTO match_reports (match_id, reporter_id, reported_user_id, reason) VALUES ($1, $2, $3, $4)',
+      [req.params.matchId, req.user.id, membership.otherId, reason]
+    );
     if (!membership.blocked) {
       await pool.query('UPDATE matches SET blocked_by = $2, blocked_at = NOW() WHERE id = $1', [req.params.matchId, req.user.id]);
     }
