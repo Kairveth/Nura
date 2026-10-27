@@ -52,6 +52,9 @@ cd frontend && npm run build                     # debe compilar sin errores
 - **Nunca** uses `git add .` ni `git add -A`: añade por rutas (`git add backend`). Hay un hook local `.git/hooks/pre-commit` que bloquea ficheros sensibles y diffs con cadenas de conexión o claves; no lo saltes (`--no-verify`).
 - Consultas SQL **siempre parametrizadas** (`$1`, `$2`…); jamás interpolar entrada del usuario.
 - **Toda `CREATE TABLE`** en una migración lleva `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` (sin políticas: solo el backend, que entra como `postgres`, accede). Supabase da permisos a `anon` en cada tabla nueva de `public`, y la clave anon es pública. Comprobarlo con esa clave: `GET`/`POST /rest/v1/<tabla>` → `42501`.
+- **Nunca guardes una URL que venga del cliente** sin lista blanca (ver `isOwnPhotoUrl`): una URL externa es un píxel espía para quien la vea. Las imágenes subidas pasan siempre por `cleanImage` (quita EXIF/GPS).
+- Todo `fetch` a un servicio externo lleva `signal: AbortSignal.timeout(...)`. En flujos que no deben delatar si una cuenta existe, no esperes al proveedor antes de responder (el tiempo también filtra).
+- Toda lista que sirva perfiles ajenos necesita un tope por usuario y día, no solo por minuto (ver `reserveFeedQuota`).
 - Al añadir una tabla con datos de un usuario: inclúyela en `exportData` (si son datos suyos) y en el orden de borrado de `deleteAccount` (`accountController.js`) si no borra en cascada.
 - **Valida en el servidor** tipo, formato y longitud de toda entrada (el frontend es solo comodidad).
 - Las respuestas de la API **no devuelven** `password_hash`, emails de otros usuarios ni campos internos.

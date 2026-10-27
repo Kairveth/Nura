@@ -65,8 +65,8 @@ Las rutas autenticadas añaden `authMiddleware` (JWT + `token_version`) y `userL
 | POST | `/api/profiles` | JWT | Crea el perfil propio (acepta `photo_url`) |
 | PUT | `/api/profiles` | JWT | Edita el perfil propio |
 | POST | `/api/profiles/photo` | JWT | Sube una foto (multipart), devuelve `{ photo_url }`; no toca la BD |
-| GET | `/api/profiles/feed` | JWT | Perfiles aún no valorados, con filtros. **Paginado por cursor** |
-| GET | `/api/profiles/:userId` | JWT | Perfil por id |
+| GET | `/api/profiles/feed` | JWT | Perfiles aún no valorados, con filtros. **Paginado por cursor**, tope de 150 perfiles servidos al día |
+| GET | `/api/profiles/:userId` | JWT | Solo el perfil **propio** (otro id → 404) |
 | POST | `/api/auth/logout-all` | JWT | Restablece **todas** las sesiones del usuario |
 | POST | `/api/auth/forgot-password` | — (rate limit 3/h) | Siempre responde igual; si la cuenta existe, envía email |
 | POST | `/api/auth/reset-password` | — (rate limit 3/h) | Token de un solo uso (hash en BD), 30 min |
@@ -118,11 +118,19 @@ match no existe, responde **404** en los dos casos por igual (no delata si el ma
 `matches.blocked_by` / `blocked_at` (migración `010`): **simétrico**, cierra el chat para las dos
 partes por igual, no solo para quien lo activó — `createMessage` lo comprueba y devuelve 403;
 `getMessages` sigue funcionando (el historial no se borra). `getMatches`/`getMatch` nunca exponen el
-uuid de quién bloqueó, solo `blocked` y `blocked_by_me` (calculados en `withBlockInfo`).
+uuid de quién bloqueó, solo `blocked` y `blocked_by_me` (calculados en `withBlockInfo`). Quien **fue**
+bloqueado recibe `profile_hidden: true` y ningún dato de perfil de quien le bloqueó (ni foto, ni
+ubicación, ni id): si esa persona cambia de ubicación, no se puede seguir. Quien bloqueó sí lo ve.
 
-Reportar (`match_reports`: `match_id`, `reporter_id`, `reason`, lista cerrada en `REPORT_REASONS`)
-bloquea a la vez — protege a quien reporta sin un paso aparte. Bloquear solo (sin reportar) también
-existe, para "ya no quiero hablar" sin necesidad de alegar un motivo.
+Reportar (`match_reports`: `match_id`, `reporter_id`, `reported_user_id`, `reason`, lista cerrada en
+`REPORT_REASONS`) bloquea a la vez — protege a quien reporta sin un paso aparte. Bloquear solo (sin
+reportar) también existe, para "ya no quiero hablar" sin necesidad de alegar un motivo.
+
+**Los reportes sobreviven al borrado de cuenta (migración `013`):** `match_id` y `reporter_id` pasan a
+`NULL` y `reported_user_id` no tiene FK. Si se borra una cuenta con reportes en contra, se guarda un HMAC
+de su email en `reported_account_deletions` (`utils/reportedAccounts.js`, clave derivada de `JWT_SECRET`);
+un registro nuevo con ese email deja el evento `signup_reported_returning` en la auditoría, sin cambiar la
+respuesta. Base legal: interés legítimo (seguridad); tiene que constar en la política de privacidad.
 
 ### Exportar y borrar la cuenta (GDPR, `accountController.js`)
 
@@ -164,6 +172,8 @@ técnico: por eso se aplica en el servidor y no solo en la interfaz, para que no
 
 PostgreSQL con `users`, `profiles`, `swipes`, `matches`, `messages` y `match_reports`. Reglas de negocio en BD: unicidad de swipe por par. Solo `profiles`, `messages` (vía `matches`) y `match_reports` borran en cascada; `swipes` y `matches` no, por eso borrar una cuenta va tabla a tabla (ver "Exportar y borrar la cuenta"). Consultas siempre parametrizadas (`$1`, `$2`…).
 
+**Tope diario del feed (migración `012`):** `users.feed_served_on` / `feed_served_count`. `getFeed` reserva cupo con un `UPDATE ... FOR UPDATE` atómico (peticiones en paralelo no se lo saltan) hasta `FEED_DAILY_CAP` (150 = 10× los swipes) y devuelve lo no servido. Al llegar, página vacía con `feed_limit_reached: true`. Sin esto, el feed se recorría con el cursor sin hacer swipes y se bajaba a todos los usuarios.
+
 **API REST de Supabase cerrada (migración `011`):** Nura no usa PostgREST ni Supabase Auth; el backend entra como `postgres` (omite RLS). Las 6 tablas tienen RLS activo y `anon`/`authenticated` no tienen ningún permiso de tabla, secuencia ni función en `public` (también por *default privileges*, para las tablas futuras creadas por `postgres`). **Toda tabla nueva** lleva `ENABLE ROW LEVEL SECURITY` en su migración: Supabase concede por defecto permisos a `anon` en cada tabla nueva de `public`.
 
 **Índices** (migración local `003`, aplicada): el orden base `(created_at DESC, id DESC)` y cada filtro del feed (tipo, ubicación) combinado con ese orden, más edad; en `matches`, por usuario y orden; en `messages`, por match y orden (chat). Se eliminaron los redundantes que ya cubren las restricciones `UNIQUE`. Comprobar con `EXPLAIN ANALYZE`.
@@ -197,9 +207,15 @@ sin listado posible con la clave anon — comprobado). Todas las escrituras (sub
 las hace el backend con la **service key** (`SUPABASE_SERVICE_KEY`, nunca en el frontend, omite RLS).
 
 - `POST /api/profiles/photo` (multipart, campo `photo`): valida tipo real por cabecera de fichero
-  (no el `mimetype` que manda el navegador) y tamaño (≤ 5 MB); sube con nombre aleatorio bajo
-  `{userId}/...`; borra la foto anterior del usuario si había. Devuelve `{ photo_url }`; el cliente
-  la incluye al crear/editar el perfil (este endpoint no toca la base de datos).
+  (no el `mimetype` que manda el navegador) y tamaño (≤ 5 MB); **vuelve a codificar** la imagen con
+  `sharp` (`cleanImage`): sin EXIF/GPS/XMP ni datos tras la imagen, orientación aplicada, ≤ 1600 px y
+  tope de 40 MP de entrada contra bombas de descompresión. Sube con nombre aleatorio bajo `{userId}/...`
+  y borra la foto anterior si había. Devuelve `{ photo_url }`; el cliente la incluye al crear/editar el
+  perfil (este endpoint no toca la base de datos).
+- `photo_url` en `POST`/`PUT /api/profiles` solo se acepta si es una URL de **su propia** carpeta del
+  bucket con el formato de la subida (`isOwnPhotoUrl`): nada de URLs externas (píxel espía que registra
+  la IP de quien ve el perfil) ni fotos de otro usuario.
+- Toda llamada a Storage y a Resend tiene tiempo límite de 10 s (`AbortSignal.timeout`).
 - La URL pública pasa por el CDN de Supabase (`cache-control: max-age=300`): tras reemplazar una
   foto, la anterior puede seguir sirviéndose desde caché hasta 5 min aunque el origen ya la borró.
   Nunca se vuelve a devolver esa URL, así que no hay forma de encontrarla salvo tenerla ya guardada.
