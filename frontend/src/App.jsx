@@ -9,6 +9,7 @@ import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import ProfileCreate from './pages/ProfileCreate';
 import ProfileFeed from './pages/ProfileFeed';
+import Percepcion from './pages/Percepcion';
 import MatchesList from './pages/MatchesList';
 import Chat from './pages/Chat';
 import Settings from './pages/Settings';
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/profile/create" element={<ProfileCreate />} />
             <Route path="/feed" element={<ProfileFeed />} />
+            <Route path="/percepcion" element={<Percepcion />} />
             <Route path="/matches" element={<MatchesList />} />
             <Route path="/settings" element={<Settings />} />
           </Route>

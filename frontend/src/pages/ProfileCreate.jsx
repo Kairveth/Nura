@@ -42,7 +42,7 @@ export default function ProfileCreate() {
   const [photoError, setPhotoError] = useState('');
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState('');
-  const [form, setForm] = useState({ description: '', age: '', location: '', neurotipos: [], intention: '' });
+  const [form, setForm] = useState({ description: '', age: '', location: '', neurotipos: [], intention: '', connection_note: '' });
 
   // Si ya hay perfil, esta misma pantalla lo carga y lo edita en vez de duplicar una vista aparte.
   useEffect(() => {
@@ -57,7 +57,8 @@ export default function ProfileCreate() {
           age: res.data.age ?? '',
           location: res.data.location ?? '',
           neurotipos: res.data.neurotipos ?? [],
-          intention: res.data.intention ?? ''
+          intention: res.data.intention ?? '',
+          connection_note: res.data.connection_note ?? ''
         });
         if (res.data.photo_url) setPhotoPreview(res.data.photo_url);
       })
@@ -70,7 +71,7 @@ export default function ProfileCreate() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'description' && value.length > 200) return;
+    if ((name === 'description' || name === 'connection_note') && value.length > 200) return;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -180,6 +181,16 @@ export default function ProfileCreate() {
             </option>
           ))}
         </Field>
+
+        <Field
+          as="textarea"
+          label="Cómo conectar conmigo"
+          name="connection_note"
+          placeholder="Cuéntale a quien te escriba cómo prefieres que conecten contigo."
+          value={form.connection_note}
+          onChange={handleChange}
+          hint="Opcional. Ej: respondo mejor a mensajes directos · necesito un rato para contestar · los audios me agobian"
+        />
 
         <div role="alert" aria-live="polite" className="min-h-[1.5rem] text-sm font-semibold text-alert">
           {error}

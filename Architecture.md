@@ -233,27 +233,29 @@ del límite de 3/hora por IP (compartido entre `forgot-password` y `reset-passwo
 activas, no solo la que hizo el cambio). Mismo error genérico (`Invalid or expired token`) para token
 inexistente, ya usado o caducado.
 
-### Afinidad (`utils/affinity.js`)
+### Match por percepción (`utils/perception.js`)
 
-Diferenciador deliberado frente a Tinder/Bumble: no es un algoritmo de recomendación (fuera del
-scope del MVP), es un **reordenado transparente** de la página que ya se iba a mostrar.
+Diferenciador deliberado frente a Tinder/Bumble: no se empareja por foto ni por "gustos en común", sino
+por **cómo percibís la vida** (ver `Especificacion/05-match-percepcion.md`). El neurotipo ya **no puntúa**
+(solo se muestra y filtra). Sigue sin ser un recomendador: es un **reordenado transparente** de la página
+que ya se iba a mostrar. (Sustituye al antiguo `utils/affinity.js`, borrado.)
 
-- `getFeed` calcula la página exactamente igual que siempre (cursor, filtros, `next_cursor` incluido)
-  y **solo después** reordena el array `data` ya decidido: nunca decide quién aparece, solo en qué
-  orden dentro de esa página. El cursor se calcula sobre el orden cronológico original, así que nadie
-  se salta ni se repite entre páginas (probado con paginación de 1 en 1).
-- Puntos: +2 por cada etiqueta de neurotipo compartida, +3 por pareja complementaria
-  (`COMPLEMENTARY_PAIRS`: TDAH↔TEA/Autismo, AACC↔TDAH, PAS↔TEA/Autismo — lista corta a propósito,
-  mejor pocas afirmaciones defendibles que muchas inventadas). "Sin diagnóstico formal" y "Prefiero
-  no decir" no cuentan para nada, ni como igual ni como pareja. TLP no tiene pareja complementaria:
-  las dinámicas de relación ahí son un tema clínico serio, no un rasgo que "encaje bien" con otro.
-- Con jitter aleatorio (`Math.random() * 2.5`) sobre la puntuación antes de ordenar: dos personas con
-  la misma puntuación no siempre salen en el mismo orden, y alguien con menos puntos a veces se cuela
-  antes. Deliberado ("química accidental"): no queremos un ranking 100% predecible.
-- El texto del chip (`ProfileFeed.jsx`, `compatChips`) es independiente: nunca se envía una
-  puntuación por la API, el frontend calcula su propio texto literal a partir de los mismos datos
-  (`neurotipos`, edad, ubicación) que ya recibía. La lista `COMPLEMENTARY_PAIRS` está duplicada ahí
-  (mismo patrón que `NEUROTIPOS`): cualquier cambio va en los dos sitios.
+- 6 dimensiones de percepción (columnas `perc_*` en `profiles`, escala 1–5, `NULL` = sin responder;
+  cuestionario progresivo). Cada una puntúa por **similitud** (base común: sensorial, comunicación,
+  emocional, social) o por **complemento** (chispa: ritmo, estructura).
+- `scoreMatch(mine, other)` = **Base × Chispa** (media de similitud × media de complemento, ambas en
+  [0,1]). Multiplicativo: una base pobre no se rescata con chispa. Devuelve `null` si falta una familia
+  entera por responder → esa tarjeta no se reordena (orden cronológico), así que sin responder lo
+  suficiente el feed queda tal cual. Simétrico: `scoreMatch(a,b) === scoreMatch(b,a)`.
+- `getFeed` calcula la página igual que siempre (cursor, filtros, `next_cursor`) y **solo después**
+  reordena con `sortByPerception` el array `data` ya decidido: nunca decide quién aparece, solo el orden.
+  Orden **determinista** (sin jitter). El cursor se calcula sobre el orden cronológico original, así que
+  nadie se salta ni se repite entre páginas.
+- La API **no expone los `perc_*` crudos** de otras personas (datos íntimos): el feed los usa para ordenar
+  y luego los elimina de la respuesta, enviando solo `match_reason` (`{ comun, complementa }`) para que la
+  UI componga el texto cualitativo. Nunca se envía un número ni un porcentaje de match.
+- `connection_note` (varchar 200, "cómo conectar conmigo") viaja en el perfil y en el feed como contenido
+  público del perfil, saneado con `sanitizeText`.
 
 ## 4. Frontend
 

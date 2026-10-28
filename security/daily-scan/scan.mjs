@@ -274,12 +274,38 @@ async function probeSignupLimit() {
   }
 }
 
+async function probePerception(u, other) {
+  // Rango: perc_* solo acepta enteros 1–5. Fuera de rango o como string → 400.
+  rec('Percepción', 'perc fuera de rango (9) → 400', (await req('PUT', '/api/profiles', { token: u.token, body: { perc_ritmo: 9 } })).status === 400, '');
+  rec('Percepción', 'perc como string ("3") → 400', (await req('PUT', '/api/profiles', { token: u.token, body: { perc_ritmo: '3' } })).status === 400, '');
+
+  // Percepción válida en ambos (base común + chispa) para que el feed tenga match_reason real.
+  await req('PUT', '/api/profiles', { token: u.token, body: { perc_ritmo: 1, perc_estructura: 1, perc_sensorial: 3, perc_comunicacion: 3, perc_emocional: 3, perc_social: 3 } });
+  await req('PUT', '/api/profiles', { token: other.token, body: { perc_ritmo: 5, perc_estructura: 5, perc_sensorial: 3, perc_comunicacion: 3, perc_emocional: 3, perc_social: 3 } });
+
+  // connection_note con <script> → se guarda saneado (sin etiqueta ni manejador).
+  await req('PUT', '/api/profiles', { token: other.token, body: { connection_note: '<script>alert(1)</script> escríbeme directo' } });
+  const note = (await pool.query('SELECT connection_note FROM profiles WHERE user_id = $1', [other.id])).rows[0].connection_note;
+  const noteSafe = !/<[a-zA-Z/!]/.test(note) && !/\bon\w+\s*=/.test(note) && !/<script/i.test(note);
+  rec('Percepción', 'connection_note con <script> se guarda escapado', noteSafe, JSON.stringify(note).slice(0, 40));
+
+  // El feed NO expone la foto real ni los perc_* crudos de otras personas; SÍ el match_reason cualitativo.
+  const feed = await req('GET', '/api/profiles/feed', { token: u.token });
+  const cards = feed.json?.data ?? [];
+  rec('Percepción', 'feed no expone foto real', feed.status === 200 && !cards.some((c) => 'photo_url' in c), `${cards.length} tarjetas`);
+  rec('Percepción', 'feed no expone perc_* crudos de otros', !cards.some((c) => 'perc_ritmo' in c || 'perc_social' in c));
+  rec('Percepción', 'feed incluye match_reason cualitativo', cards.length > 0 && cards.every((c) => c.match_reason && Array.isArray(c.match_reason.comun) && Array.isArray(c.match_reason.complementa)));
+}
+
 // ============================ ORQUESTACIÓN ============================
 async function startBackend() {
   const ready = async () => { try { return (await fetch(`${API}/health`, { signal: AbortSignal.timeout(2000) })).ok; } catch { return false; } };
   if (await ready()) return null; // ya hay uno escuchando
   if (!SPAWN) throw new Error(`No responde ${API} y SCAN_TARGET impide levantar uno local`);
-  const srv = spawn(process.execPath, ['src/index.js'], { cwd: BACKEND, env: { ...process.env, PORT: String(PORT), NODE_ENV: 'development' }, stdio: 'ignore' });
+  // API_RATE_MAX alto: la suite es un solo IP que hace cientos de peticiones; sin esto, la red global
+  // de 60/min se dispararía a sí misma y las últimas comprobaciones recibirían 429 en vez de 404/400.
+  // No desactiva nada que se pruebe: el límite de registro (5/15 min) es su propio limitador aparte.
+  const srv = spawn(process.execPath, ['src/index.js'], { cwd: BACKEND, env: { ...process.env, PORT: String(PORT), NODE_ENV: 'development', API_RATE_MAX: '100000' }, stdio: 'ignore' });
   for (let i = 0; i < 30; i++) { if (await ready()) return srv; await new Promise((r) => setTimeout(r, 400)); }
   throw new Error('el backend local no arrancó a tiempo');
 }
@@ -332,6 +358,7 @@ const writeReport = () => {
       () => probeMassAssignment(att, vic),
       () => probeInputLimits(att, matchAB),
       () => probeFileUpload(att, vic),
+      () => probePerception(att, third), // att y third: att no ha hecho swipe a third todavía
       () => probePiiExposure(att, vic, matchAB), // bloquea matchAB al final
       () => probeBusinessLogic(third, att),
       () => probeSurface(),

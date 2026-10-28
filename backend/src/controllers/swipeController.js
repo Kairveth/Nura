@@ -1,6 +1,7 @@
 import pool from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js';
+import { matchReason, pickPerc, stripPerc } from '../utils/perception.js';
 
 // Tope diario de valoraciones: es la palanca de "calidad sobre cantidad", no un límite técnico.
 // Menos perfiles por día empuja a decidir con atención en vez de acumular swipes sin pensar.
@@ -144,6 +145,7 @@ export const getMatch = async (req, res) => {
     const { rows } = await pool.query(
       `SELECT m.id, m.created_at, p.user_id AS matched_user_id,
               p.photo_url, p.description, p.age, p.location, p.neurodivergence_types AS neurotipos, p.intention,
+              p.perc_ritmo, p.perc_estructura, p.perc_sensorial, p.perc_comunicacion, p.perc_emocional, p.perc_social,
               m.blocked_by, m.blocked_at
        FROM matches m
        JOIN profiles p ON p.user_id = CASE WHEN m.user_1_id = $1 THEN m.user_2_id ELSE m.user_1_id END
@@ -152,7 +154,21 @@ export const getMatch = async (req, res) => {
     );
 
     if (!rows[0]) return res.status(404).json({ error: 'Match not found' });
-    res.json(withBlockInfo(userId)(rows[0]));
+
+    // Mi percepción, para el porqué cualitativo ("en qué os complementáis" en el chat).
+    const mineRes = await pool.query(
+      `SELECT perc_ritmo, perc_estructura, perc_sensorial, perc_comunicacion, perc_emocional, perc_social
+         FROM profiles WHERE user_id = $1`,
+      [userId]
+    );
+    const myPerc = mineRes.rows[0] ?? null;
+    // No se exponen los perc_* crudos de la otra persona (datos íntimos): se calcula el porqué y se quitan.
+    const result = withBlockInfo(userId)(stripPerc(rows[0]));
+    // Si el perfil está oculto (bloqueo), no se muestra el porqué del match.
+    result.match_reason = result.profile_hidden
+      ? { comun: [], complementa: [], friccion: [] }
+      : matchReason(myPerc, pickPerc(rows[0]));
+    res.json(result);
   } catch (err) {
     log('ERROR', 'get match failed', { code: err.code, message: err.message });
     res.status(500).json({ error: 'Failed to fetch match' });

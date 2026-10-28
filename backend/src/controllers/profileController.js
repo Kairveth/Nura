@@ -4,7 +4,7 @@ import { parseLimit, parseCursor, toPage } from '../utils/pagination.js';
 import { sanitizeText } from '../utils/sanitize.js';
 import { sniffImageMime, cleanImage, replaceProfilePhoto, isOwnPhotoUrl } from '../utils/storage.js';
 import { countSwipesToday, DAILY_SWIPE_LIMIT } from './swipeController.js';
-import { sortByAffinity } from '../utils/affinity.js';
+import { sortByPerception, matchReason, DIMENSIONS, pickPerc, stripPerc } from '../utils/perception.js';
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const MAX_NEUROTIPOS = 6; // varias etiquetas están bien (TDAH + TEA...), todas a la vez ya no informa nada
@@ -31,9 +31,13 @@ export const NEUROTIPOS = [
 // opción, no varias: es "qué buscas ahora mismo", no una lista de posibilidades a la vez.
 export const INTENTIONS = ['Relación', 'Amistad', 'Aún no lo sé'];
 
-const COLUMNS = 'id, user_id, photo_url, description, age, location, neurodivergence_types AS neurotipos, intention, created_at';
-const FEED_COLUMNS = `p.id, p.user_id, p.photo_url, p.description, p.age, p.location,
-  p.neurodivergence_types AS neurotipos, p.intention, p.created_at, p.created_at::text AS cursor_ts`;
+const COLUMNS = `id, user_id, photo_url, description, age, location, neurodivergence_types AS neurotipos, intention, created_at,
+  perc_ritmo, perc_estructura, perc_sensorial, perc_comunicacion, perc_emocional, perc_social, connection_note`;
+// La foto REAL no va en el feed (solo avatar derivado de user_id). Sí van los perc_* crudos y connection_note:
+// se usan para ordenar y para el porqué cualitativo, y los perc_* se eliminan antes de responder (ver getFeed).
+const FEED_COLUMNS = `p.id, p.user_id, p.description, p.age, p.location,
+  p.neurodivergence_types AS neurotipos, p.intention, p.created_at, p.created_at::text AS cursor_ts,
+  p.perc_ritmo, p.perc_estructura, p.perc_sensorial, p.perc_comunicacion, p.perc_emocional, p.perc_social, p.connection_note`;
 
 // Texto libre: se limpia (control, HTML) antes de validar longitud y de guardar
 const clean = (value) => (typeof value === 'string' ? sanitizeText(value) : value);
@@ -57,8 +61,11 @@ const photoUrlError = (userId, photo_url) =>
   photo_url !== undefined && !isOwnPhotoUrl(userId, photo_url) ? 'Invalid photo_url' : null;
 
 // Devuelve un mensaje de error o null. Con `partial`, solo valida los campos presentes.
-const validateProfile = ({ description, age, location, neurotipos, intention }, { partial = false } = {}) => {
+// `perc` mapea cada columna perc_* (ver DIMENSIONS) a su valor del body. La percepción y el manual de
+// conexión nunca son obligatorios (cuestionario progresivo): solo se validan los que vienen.
+const validateProfile = ({ description, age, location, neurotipos, intention, connection_note, perc = {} }, { partial = false } = {}) => {
   const missing = (v) => v === undefined || v === null || v === '';
+  const present = (v) => v !== undefined && v !== null; // null/undefined = ausente (modo progresivo/partial)
   if (!partial && [description, age, location, intention].some(missing)) return 'Missing required fields';
   if (!partial && neurotipos === undefined) return 'Missing required fields';
   if (!missing(description) && (typeof description !== 'string' || description.length > 200)) return 'Description max 200 chars';
@@ -66,6 +73,11 @@ const validateProfile = ({ description, age, location, neurotipos, intention }, 
   if (!missing(location) && (typeof location !== 'string' || location.length > 100)) return 'Invalid location';
   if (neurotipos !== undefined && validNeurotipos(neurotipos) === null) return 'Invalid neurotipos';
   if (!missing(intention) && !INTENTIONS.includes(intention)) return 'Invalid intention';
+  if (present(connection_note) && (typeof connection_note !== 'string' || connection_note.length > 200)) return 'Invalid connection_note';
+  for (const { column } of DIMENSIONS) {
+    const v = perc[column];
+    if (present(v) && !(Number.isInteger(v) && v >= 1 && v <= 5)) return 'Invalid perception value';
+  }
   return null;
 };
 
@@ -74,15 +86,23 @@ export const createProfile = async (req, res) => {
     const { age, neurotipos, intention, photo_url } = req.body ?? {};
     const description = clean(req.body?.description);
     const location = clean(req.body?.location);
+    const connection_note = clean(req.body?.connection_note);
+    // perc_* del body, por columna (null = sin responder: la percepción es progresiva, nunca obligatoria)
+    const perc = {};
+    for (const { column } of DIMENSIONS) perc[column] = req.body?.[column];
     const userId = req.user.id;
 
-    const error = validateProfile({ description, age, location, neurotipos, intention }) || photoUrlError(userId, photo_url);
+    const error = validateProfile({ description, age, location, neurotipos, intention, connection_note, perc }) || photoUrlError(userId, photo_url);
     if (error) return res.status(400).json({ error });
 
     const result = await pool.query(
-      `INSERT INTO profiles (user_id, description, age, location, neurodivergence_types, intention, photo_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COLUMNS}`,
-      [userId, description, toAge(age), location, validNeurotipos(neurotipos), intention, photo_url ?? null]
+      `INSERT INTO profiles (user_id, description, age, location, neurodivergence_types, intention, photo_url,
+         perc_ritmo, perc_estructura, perc_sensorial, perc_comunicacion, perc_emocional, perc_social, connection_note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING ${COLUMNS}`,
+      [userId, description, toAge(age), location, validNeurotipos(neurotipos), intention, photo_url ?? null,
+       perc.perc_ritmo ?? null, perc.perc_estructura ?? null, perc.perc_sensorial ?? null,
+       perc.perc_comunicacion ?? null, perc.perc_emocional ?? null, perc.perc_social ?? null,
+       connection_note ?? null]
     );
 
     res.status(201).json(result.rows[0]);
@@ -101,9 +121,12 @@ export const updateProfile = async (req, res) => {
     const { age, neurotipos, intention, photo_url } = req.body ?? {};
     const description = clean(req.body?.description);
     const location = clean(req.body?.location);
+    const connection_note = clean(req.body?.connection_note);
+    const perc = {};
+    for (const { column } of DIMENSIONS) perc[column] = req.body?.[column];
     const userId = req.user.id;
 
-    const error = validateProfile({ description, age, location, neurotipos, intention }, { partial: true }) || photoUrlError(userId, photo_url);
+    const error = validateProfile({ description, age, location, neurotipos, intention, connection_note, perc }, { partial: true }) || photoUrlError(userId, photo_url);
     if (error) return res.status(400).json({ error });
 
     const updates = ['updated_at = NOW()'];
@@ -119,6 +142,9 @@ export const updateProfile = async (req, res) => {
     if (neurotipos !== undefined) set('neurodivergence_types', validNeurotipos(neurotipos));
     if (intention !== undefined) set('intention', intention);
     if (photo_url !== undefined) set('photo_url', photo_url);
+    if (connection_note !== undefined) set('connection_note', connection_note);
+    // perc_* como enteros (ya validados 1–5); solo los presentes se actualizan (cuestionario progresivo)
+    for (const { column } of DIMENSIONS) if (perc[column] !== undefined) set(column, perc[column]);
 
     if (updates.length === 1) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -278,10 +304,16 @@ export const getFeed = async (req, res) => {
     // Solo cuenta lo que de verdad se sirvió: una página corta (fin del feed, filtros estrechos) devuelve el resto
     if (page.data.length < granted) await refundFeedQuota(userId, granted - page.data.length);
 
-    // Reordena SOLO esta página ya decidida hacia mayor afinidad (nunca oculta ni salta a nadie:
-    // ver utils/affinity.js). Si el perfil propio no existe todavía, se enseña en orden normal.
-    const mine = await pool.query('SELECT neurodivergence_types FROM profiles WHERE user_id = $1', [userId]);
-    if (mine.rows[0]) page.data = sortByAffinity(mine.rows[0].neurodivergence_types, page.data);
+    // Mi percepción, para ordenar y para el porqué cualitativo del match.
+    const mine = await pool.query(
+      `SELECT perc_ritmo, perc_estructura, perc_sensorial, perc_comunicacion, perc_emocional, perc_social
+         FROM profiles WHERE user_id = $1`,
+      [userId]
+    );
+    const myPerc = mine.rows[0] ?? null;
+    if (myPerc) page.data = sortByPerception(myPerc, page.data); // null → sin reordenar (cronológico)
+    // match_reason cualitativo; NO se exponen los perc_* crudos de la otra persona (son datos íntimos)
+    page.data = page.data.map((card) => ({ ...stripPerc(card), match_reason: matchReason(myPerc, pickPerc(card)) }));
 
     res.json({ ...page, swipes_today: swipesToday, daily_limit: DAILY_SWIPE_LIMIT });
   } catch (err) {
