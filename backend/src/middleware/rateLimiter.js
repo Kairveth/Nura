@@ -19,10 +19,12 @@ export const loginLimiter = limiter({
   message: { error: 'Too many attempts' }
 });
 
-// Red de seguridad global por IP
+// Red de seguridad global por IP. `API_RATE_MAX` solo lo fija la suite de seguridad local (un único IP
+// martillea toda la API y, si no, dispararía esta red y recibiría 429 en vez del 404/400 que comprueba).
+// En producción no se define → se queda en 60.
 export const apiLimiter = limiter({
   windowMs: 60 * 1000,
-  max: 60,
+  max: Number(process.env.API_RATE_MAX) || 60,
   message: { error: 'Too many requests' }
 });
 
