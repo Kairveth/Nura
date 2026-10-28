@@ -48,7 +48,7 @@ export default function ProfileCreate() {
   useEffect(() => {
     let active = true;
     client
-      .get(`/api/profiles/${user.id}`)
+      .get('/api/profiles/me')
       .then((res) => {
         if (!active) return;
         setExisting(true);

@@ -5,10 +5,9 @@ import pool from '../db.js';
 import { log, audit, ipTag } from '../utils/logger.js';
 import { sendEmail } from '../utils/email.js';
 import { reportsBeforeDeletion } from '../utils/reportedAccounts.js';
+import { MIN_PASSWORD, MAX_PASSWORD_BYTES } from '../utils/limits.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD = 8;
-const MAX_PASSWORD_BYTES = 72; // bcrypt ignora lo que pase de 72 bytes
 const MAX_FAILED_LOGINS = 5; // intentos fallidos antes de bloquear la cuenta
 const LOCK_MINUTES = 15;
 const RESET_TOKEN_MINUTES = 30;

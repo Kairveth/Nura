@@ -1,4 +1,5 @@
 import { log } from './logger.js';
+import { EXTERNAL_TIMEOUT_MS } from './limits.js';
 
 // Envío por Resend vía fetch directo (sin su SDK): una sola llamada HTTP, no vale la pena una
 // dependencia más para esto. En el dominio de pruebas (`onboarding@resend.dev`) Resend solo entrega
@@ -15,7 +16,7 @@ export const sendEmail = async ({ to, subject, html }) => {
       method: 'POST',
       headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' },
       body: JSON.stringify({ from: FROM, to, subject, html }),
-      signal: AbortSignal.timeout(10_000) // un proveedor colgado no puede dejar peticiones esperando para siempre
+      signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) // un proveedor colgado no puede dejar peticiones esperando para siempre
     });
     if (!res.ok) {
       // Solo el tipo de error: el cuerpo de Resend puede repetir la dirección de destino (PII en los logs)

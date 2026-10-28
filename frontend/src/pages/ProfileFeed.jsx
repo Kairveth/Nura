@@ -77,8 +77,8 @@ export default function ProfileFeed() {
   const [filters, setFilters] = useState({ age_min: '', age_max: '', location: '', neurotipos: [] });
 
   useEffect(() => {
-    client.get(`/api/profiles/${userId}`).then((res) => setMyProfile(res.data)).catch(() => {});
-  }, [userId]);
+    client.get('/api/profiles/me').then((res) => setMyProfile(res.data)).catch(() => {});
+  }, [userId]); // vuelve a pedirlo si cambia el usuario de la sesión
 
   // Espera a que el usuario termine de escribir antes de pedir el feed
   useEffect(() => {

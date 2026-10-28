@@ -5,7 +5,7 @@ import { userLimiter } from '../middleware/rateLimiter.js';
 import {
   createProfile,
   updateProfile,
-  getProfile,
+  getMyProfile,
   getFeed,
   uploadPhoto
 } from '../controllers/profileController.js';
@@ -26,7 +26,7 @@ const photoUpload = (req, res, next) =>
 
 router.post('/photo', authMiddleware, userLimiter, photoUpload, uploadPhoto);
 
-// Perfil por id: requiere sesión (una ruta pública permitiría rastrear perfiles)
-router.get('/:userId', authMiddleware, userLimiter, getProfile);
+// Perfil propio: sale de la sesión, sin id en la ruta. No hay endpoint para pedir el de otra persona.
+router.get('/me', authMiddleware, userLimiter, getMyProfile);
 
 export default router;

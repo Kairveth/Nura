@@ -1,6 +1,6 @@
 import pool from '../db.js';
 import { log } from '../utils/logger.js';
-import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js';
+import { parseLimit, parseCursor, toPage } from '../utils/pagination.js';
 import { sanitizeText } from '../utils/sanitize.js';
 import { sniffImageMime, cleanImage, replaceProfilePhoto, isOwnPhotoUrl } from '../utils/storage.js';
 import { countSwipesToday, DAILY_SWIPE_LIMIT } from './swipeController.js';
@@ -51,6 +51,11 @@ const validNeurotipos = (value) => {
   return unique;
 };
 
+// photo_url (si viene) solo puede ser una foto de la carpeta propia del bucket (ver isOwnPhotoUrl).
+// Devuelve el mensaje de error o null. Compartido entre crear y actualizar perfil.
+const photoUrlError = (userId, photo_url) =>
+  photo_url !== undefined && !isOwnPhotoUrl(userId, photo_url) ? 'Invalid photo_url' : null;
+
 // Devuelve un mensaje de error o null. Con `partial`, solo valida los campos presentes.
 const validateProfile = ({ description, age, location, neurotipos, intention }, { partial = false } = {}) => {
   const missing = (v) => v === undefined || v === null || v === '';
@@ -71,11 +76,8 @@ export const createProfile = async (req, res) => {
     const location = clean(req.body?.location);
     const userId = req.user.id;
 
-    const error = validateProfile({ description, age, location, neurotipos, intention });
+    const error = validateProfile({ description, age, location, neurotipos, intention }) || photoUrlError(userId, photo_url);
     if (error) return res.status(400).json({ error });
-    if (photo_url !== undefined && !isOwnPhotoUrl(userId, photo_url)) {
-      return res.status(400).json({ error: 'Invalid photo_url' });
-    }
 
     const result = await pool.query(
       `INSERT INTO profiles (user_id, description, age, location, neurodivergence_types, intention, photo_url)
@@ -101,11 +103,8 @@ export const updateProfile = async (req, res) => {
     const location = clean(req.body?.location);
     const userId = req.user.id;
 
-    const error = validateProfile({ description, age, location, neurotipos, intention }, { partial: true });
+    const error = validateProfile({ description, age, location, neurotipos, intention }, { partial: true }) || photoUrlError(userId, photo_url);
     if (error) return res.status(400).json({ error });
-    if (photo_url !== undefined && !isOwnPhotoUrl(userId, photo_url)) {
-      return res.status(400).json({ error: 'Invalid photo_url' });
-    }
 
     const updates = ['updated_at = NOW()'];
     const values = [userId];
@@ -170,17 +169,13 @@ export const uploadPhoto = async (req, res) => {
   }
 };
 
-// GET /api/profiles/:userId — SOLO el perfil propio. Los perfiles ajenos llegan por el feed (los que aún
-// no has valorado) o por tus matches. Servir cualquier id dejaba a quien fue bloqueado seguir consultando
-// el perfil actualizado (ubicación incluida) de quien le bloqueó. Otro id = 404, como si no existiera.
-export const getProfile = async (req, res) => {
+// GET /api/profiles/me — SOLO el perfil propio (sale de la sesión, sin id en la ruta). Los perfiles
+// ajenos llegan por el feed (los que aún no has valorado) o por tus matches; no hay forma de pedir el de
+// otra persona por id. Esto evitaba que quien fue bloqueado siguiera consultando el perfil actualizado
+// (ubicación incluida) de quien le bloqueó.
+export const getMyProfile = async (req, res) => {
   try {
-    const { userId } = req.params;
-    if (!isUuid(userId) || userId.toLowerCase() !== String(req.user.id).toLowerCase()) {
-      return res.status(404).json({ error: 'Profile not found' });
-    }
-
-    const result = await pool.query(`SELECT ${COLUMNS} FROM profiles WHERE user_id = $1`, [userId]);
+    const result = await pool.query(`SELECT ${COLUMNS} FROM profiles WHERE user_id = $1`, [req.user.id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Profile not found' });

@@ -3,8 +3,7 @@ import pool from '../db.js';
 import { log, audit, ipTag } from '../utils/logger.js';
 import { deleteUserPhotos } from '../utils/storage.js';
 import { rememberIfReported } from '../utils/reportedAccounts.js';
-
-const MAX_PASSWORD_BYTES = 72; // mismo tope que authController (bcrypt ignora lo que pase de 72 bytes)
+import { MAX_PASSWORD_BYTES } from '../utils/limits.js';
 
 // GET /api/account/export (US-013): todos los datos PROPIOS en un JSON, descargado al momento.
 // Nada de terceros: ni el perfil de la otra persona ni sus mensajes, solo los ids de los matches.

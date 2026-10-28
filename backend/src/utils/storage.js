@@ -1,13 +1,12 @@
 import crypto from 'crypto';
 import sharp from 'sharp';
+import { EXTERNAL_TIMEOUT_MS } from './limits.js';
 
 // Sube fotos de perfil a Supabase Storage con la service key (nunca expuesta al navegador).
 // El bucket es público solo para LECTURA por URL directa; listar/escribir exige la service key,
 // así que un nombre aleatorio es la única puerta — no hay enumeración posible (comprobado a mano).
 const BUCKET = 'profile-photos';
 const MIME_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png' };
-// Sin límite, un Storage colgado deja cada petición esperando para siempre y se acumulan hasta agotar el servidor
-export const EXTERNAL_TIMEOUT_MS = 10_000;
 
 const base = () => process.env.SUPABASE_URL;
 const authHeaders = (contentType) => ({
