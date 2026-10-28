@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import Avatar from '../components/Avatar';
 
 const dateFmt = new Intl.DateTimeFormat('es', { day: 'numeric', month: 'short' });
 
@@ -64,7 +65,7 @@ export default function MatchesList() {
                   {match.photo_url ? (
                     <img src={match.photo_url} alt="" className="h-16 w-16 shrink-0 rounded-2xl object-cover" />
                   ) : (
-                    <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-fog text-xs text-mute">Sin foto</div>
+                    <Avatar seed={match.matched_user_id} className="h-16 w-16 shrink-0" />
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

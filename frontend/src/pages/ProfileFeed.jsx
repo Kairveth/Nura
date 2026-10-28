@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import client from '../api/client';
 import Field from '../components/Field';
 import CheckboxGroup from '../components/CheckboxGroup';
-import { useAuthStore } from '../store/authStore';
+import Avatar from '../components/Avatar';
+import { labelList } from '../lib/perceptionLabels';
 
 const PAGE_SIZE = 10;
 // Debe coincidir letra a letra con NEUROTIPOS en backend/src/controllers/profileController.js.
@@ -24,45 +25,7 @@ const NEUROTIPO_OPTIONS = [
 const validAge = (v) => v !== '' && Number.isInteger(Number(v)) && Number(v) >= 18 && Number(v) <= 120;
 const hasFilters = (f) => Boolean(f.age_min || f.age_max || f.location || f.neurotipos.length > 0);
 
-// Debe coincidir con COMPLEMENTARY_PAIRS en backend/src/utils/affinity.js. Solo para el TEXTO del
-// chip (literal, nunca un número): el orden real del feed lo decide el servidor con su propia copia.
-const COMPLEMENTARY_PAIRS = [
-  ['TDAH', 'TEA/Autismo'],
-  ['AACC (Altas Capacidades)', 'TDAH'],
-  ['PAS (Alta Sensibilidad)', 'TEA/Autismo']
-];
-
-// Etiquetas que no dicen nada comparable de la persona (igual que en backend/src/utils/affinity.js)
-const IGNORE_TAGS = new Set(['Sin diagnóstico formal', 'Prefiero no decir']);
-
-// Señales de compatibilidad, calculadas aquí mismo (no hay algoritmo de recomendación en el MVP):
-// hechos literales, nunca un porcentaje ni una puntuación. Máximo 2, por orden de interés, para no
-// saturar la tarjeta. El orden real del feed lo decide el servidor; esto es solo el texto visible.
-const compatChips = (mine, card) => {
-  if (!mine) return [];
-  const mineTags = (mine.neurotipos ?? []).filter((t) => !IGNORE_TAGS.has(t));
-  const cardTags = (card.neurotipos ?? []).filter((t) => !IGNORE_TAGS.has(t));
-  const chips = [];
-
-  for (const [a, b] of COMPLEMENTARY_PAIRS) {
-    if ((mineTags.includes(a) && cardTags.includes(b)) || (mineTags.includes(b) && cardTags.includes(a))) {
-      chips.push(`${a} + ${b}: una combinación que muchos describen como compatible`);
-    }
-  }
-  const shared = mineTags.filter((t) => cardTags.includes(t));
-  if (shared.length > 0) chips.push(`Comparte: ${shared.join(', ')}`);
-  if (mine.location && card.location && mine.location.trim().toLowerCase() === card.location.trim().toLowerCase()) {
-    chips.push(`Misma ubicación: ${card.location}`);
-  }
-  if (Number.isInteger(mine.age) && Number.isInteger(card.age) && Math.abs(mine.age - card.age) <= 3) {
-    chips.push('Edad parecida');
-  }
-  return chips.slice(0, 2);
-};
-
 export default function ProfileFeed() {
-  const userId = useAuthStore((state) => state.user.id);
-  const [myProfile, setMyProfile] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -75,10 +38,6 @@ export default function ProfileFeed() {
   const [matchBanner, setMatchBanner] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState({ age_min: '', age_max: '', location: '', neurotipos: [] });
-
-  useEffect(() => {
-    client.get('/api/profiles/me').then((res) => setMyProfile(res.data)).catch(() => {});
-  }, [userId]); // vuelve a pedirlo si cambia el usuario de la sesión
 
   // Espera a que el usuario termine de escribir antes de pedir el feed
   useEffect(() => {
@@ -257,11 +216,7 @@ export default function ProfileFeed() {
       ) : (
         <div>
           <div className="overflow-hidden rounded-2xl border border-line bg-white/70">
-            {profile.photo_url ? (
-              <img src={profile.photo_url} alt="" className="aspect-[4/5] w-full object-cover" />
-            ) : (
-              <div className="grid aspect-[4/5] w-full place-items-center bg-fog text-mute">Sin foto</div>
-            )}
+            <Avatar seed={profile.user_id} className="aspect-[4/5] w-full" />
             <div className="p-5">
               <div className="flex items-baseline justify-between gap-3">
                 <p className="text-xl font-semibold text-ink">
@@ -273,17 +228,28 @@ export default function ProfileFeed() {
               </div>
               <p className="mt-1 text-sm font-semibold text-mute">{(profile.neurotipos ?? []).join(' · ')}</p>
 
-              {compatChips(myProfile, profile).length > 0 && (
-                <ul className="mt-3 flex flex-wrap gap-2">
-                  {compatChips(myProfile, profile).map((chip) => (
-                    <li key={chip} className="rounded-full border border-sage bg-sage/15 px-3 py-1 text-xs font-semibold text-ink">
-                      {chip}
-                    </li>
-                  ))}
-                </ul>
+              {(profile.match_reason?.comun?.length > 0 || profile.match_reason?.complementa?.length > 0) && (
+                <div className="mt-3 space-y-1.5 rounded-2xl border border-sage bg-sage/15 p-3 text-sm text-ink">
+                  {profile.match_reason.comun?.length > 0 && (
+                    <p>
+                      <span className="font-semibold">En común:</span> {labelList(profile.match_reason.comun)}
+                    </p>
+                  )}
+                  {profile.match_reason.complementa?.length > 0 && (
+                    <p>
+                      <span className="font-semibold">Os complementáis en:</span> {labelList(profile.match_reason.complementa)}
+                    </p>
+                  )}
+                </div>
               )}
 
               <p className="mt-4 text-ink">{profile.description}</p>
+
+              {profile.connection_note && (
+                <p className="mt-3 text-sm text-mute">
+                  <span className="font-semibold">Cómo conectar:</span> {profile.connection_note}
+                </p>
+              )}
             </div>
           </div>
 
@@ -294,7 +260,7 @@ export default function ProfileFeed() {
               disabled={swiping}
               className="h-12 flex-1 rounded-2xl border border-line bg-white/70 text-base font-semibold text-ink transition-colors duration-200 hover:border-nura disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nura"
             >
-              Pasar
+              Ahora no
             </button>
             <button
               type="button"
@@ -302,7 +268,7 @@ export default function ProfileFeed() {
               disabled={swiping}
               className="h-12 flex-1 rounded-2xl bg-nura text-base font-semibold text-white transition-[background-color,transform,opacity] duration-200 hover:bg-nura-deep active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-nura"
             >
-              Me interesa
+              Quiero conocerte
             </button>
           </div>
         </div>
