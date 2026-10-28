@@ -12,7 +12,7 @@
 | Chat UI | P0 | 10h | TBD | - |
 | Landing page | P0 | 6h | TBD | - |
 | Responsive design | P0 | 4h | TBD | - |
-| Settings (profile delete, data download) | P1 | 4h | TBD | Done (`/settings`) |
+| Settings (profile delete, data download, logout all devices) | P1 | 4h | TBD | Done (`/settings`) |
 
 **Total Frontend: ~54h**
 

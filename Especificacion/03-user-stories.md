@@ -7,6 +7,7 @@
 
 **US-002:** Como usuario, puedo logearme para acceder mi perfil y matches.
 - Aceptación: JWT token en localStorage, refresh si expira, logout limpia sesión
+- Seguridad (decisión 2026-10-28): además, "cerrar sesión en todos los dispositivos" en Ajustes invalida todos los tokens vigentes (`token_version` en el JWT). Usuarios con PII sensible: poder revocar sesiones robadas es parte del MVP.
 
 ## Perfil
 
@@ -23,6 +24,7 @@
 
 **US-006:** Como usuario, puedo filtrar por edad, ubicación, tipo neurodivergencia.
 - Aceptación: filtros aplican, resultado actualiza, sin lag, default: todos (sin filtro = todos)
+- Seguridad (decisión 2026-10-28): "todos" tiene un tope de 150 perfiles servidos al día por usuario (anti-scraping/enumeración). No afecta al uso normal (sesiones de ~5 min); corta la descarga masiva del directorio.
 
 **US-007:** Como usuario, puedo hacer swipe sí/no en perfiles.
 - Aceptación: botones grandes, visual claro (verde=sí, rojo=no), confirmación silent
