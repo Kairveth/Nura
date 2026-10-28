@@ -2,7 +2,8 @@ import { Link } from 'react-router-dom';
 
 const LINKS = [
   ['/feed', 'Descubrir', 'Perfiles nuevos, de uno en uno. Hasta 15 al día.'],
-  ['/matches', 'Tus matches', 'Las personas con las que hicisteis match.']
+  ['/matches', 'Tus matches', 'Las personas con las que hicisteis match.'],
+  ['/percepcion', 'Afina tu match', 'Responde cómo ves, piensas y sientes. Mejores matches, a tu ritmo.']
 ];
 
 export default function Dashboard() {
