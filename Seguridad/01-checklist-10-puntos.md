@@ -78,7 +78,7 @@
 - [x] Data export (US-013): JSON descargable (`GET /api/account/export`, solo datos propios)
 - [x] Account deletion (US-012): borrado inmediato y definitivo, con contraseña (decisión 2026-10-27: sin periodo de gracia)
 
-**Test:** POST /api/account/delete con la contraseña → 204, y 0 filas del usuario en users, profiles, swipes, matches, messages y match_reports
+**Test:** POST /api/account/delete con la contraseña → 204, y 0 filas del usuario en users, profiles, swipes, matches y messages. **Excepción deliberada (migración 013):** `match_reports` se conserva por interés legítimo (las pruebas de un reporte no las puede borrar el reportado); al borrar la cuenta se desvincula (`reporter_id`/`match_id` → NULL) y el email queda solo como huella HMAC, no como dato personal.
 
 ## 10. Monitoring + Alerting (MVP minimal)
 
