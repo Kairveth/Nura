@@ -88,19 +88,28 @@ Se construye por fases, subiendo la apuesta solo cuando la anterior funciona:
 - **Fase C — 2ª iteración.** **"Lo innegociable"** (peso personalizado por dimensión) y **preguntas por
   escenario** (en vez de autoevaluación).
 
-## Decisiones abiertas (defaults propuestos; confirmables en implementación)
+## Decisiones cerradas en la revisión (2026-10-28)
 
-1. **Energía social (#6):** por defecto **similitud**; revisable a complemento si los datos lo piden.
-2. **Escala de respuesta:** 1–5 por dimensión (deslizador o 5 opciones). A fijar en el plan.
-3. **Reformulación del copy** de los extremos de cada dimensión.
+1. **Energía social (#6):** **similitud** (revisable a complemento más adelante si los datos lo piden).
+2. **Escala de respuesta:** **1–5** por dimensión.
+3. **Dónde vive la percepción:** **columnas en `profiles`**, no tabla aparte.
+4. **Reformulación del copy** de los extremos: se pule durante la implementación (voz Nura).
 
-## Impacto técnico (lo detalla `make-plan`)
+## Impacto técnico (versión simple, sin infraestructura nueva)
 
-- Nuevo almacén de respuestas de percepción por usuario (tabla/columnas) con RLS (ver
-  [[supabase-new-tables-rls]]).
-- Recalcular el feed/orden por `Base × Chispa` en vez de por afinidad de neurotipo.
-- La acción de swipe pasa a "Quiero conocerte"; revisar `swipeController`/`matches`.
-- Campo manual de conexión en `profiles`.
-- Foto: feed sirve avatar; foto real solo tras match (bucket privado + URL firmada).
-- Migraciones nuevas: toda `CREATE TABLE` en public lleva `ENABLE ROW LEVEL SECURITY`.
-- La suite de seguridad diaria debe cubrir los endpoints nuevos.
+Decisión 2026-10-28: la percepción es 1:1 con la persona, igual que el perfil, así que **no hay tabla,
+controlador, rutas ni RLS nuevas**. Vive como columnas del perfil y se usa lo que ya existe:
+
+- **6 columnas en `profiles`** (`perc_ritmo`, `perc_estructura`, `perc_sensorial`, `perc_comunicacion`,
+  `perc_emocional`, `perc_social`, `smallint` 1–5, `NULL` = sin responder) + `connection_note varchar(200)`.
+  Una sola migración de columnas (profiles ya tiene RLS; no hace falta tabla nueva).
+- **Se guarda/lee con los endpoints de perfil existentes**: `PUT /api/profiles` (guardado parcial, soporta
+  el cuestionario progresivo) y `GET /api/profiles/me`. Sin `/api/perception`.
+- **Feed por `Base × Chispa`**: sustituir `sortByAffinity` por `sortByPerception` (drop-in, mismo patrón de
+  reordenado de la página ya paginada). Si aún no has respondido las 6, el feed va en orden cronológico
+  (igual que hoy cae a orden normal sin perfil): sin lógica de "valor neutro".
+- **La acción de swipe pasa a "Quiero conocerte"**: solo relabel de producto, sin tocar el backend de swipes.
+- **Foto**: el feed sirve avatar (no `photo_url` real); la foto real solo al abrir el match (ya la sirve
+  `swipeController`). El bucket privado + URL firmada es hardening posterior (`PENDIENTES.local.md`).
+- La suite de seguridad diaria añade 2-3 probes (rango de percepción, `connection_note` escapado, feed sin
+  foto real). No hay tabla nueva, así que no hay RLS nueva que verificar.
