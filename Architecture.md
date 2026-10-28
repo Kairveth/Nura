@@ -65,8 +65,8 @@ Las rutas autenticadas añaden `authMiddleware` (JWT + `token_version`) y `userL
 | POST | `/api/profiles` | JWT | Crea el perfil propio (acepta `photo_url`) |
 | PUT | `/api/profiles` | JWT | Edita el perfil propio |
 | POST | `/api/profiles/photo` | JWT | Sube una foto (multipart), devuelve `{ photo_url }`; no toca la BD |
-| GET | `/api/profiles/feed` | JWT | Perfiles aún no valorados, con filtros. **Paginado por cursor** |
-| GET | `/api/profiles/:userId` | JWT | Perfil por id |
+| GET | `/api/profiles/feed` | JWT | Perfiles aún no valorados, con filtros. **Paginado por cursor**, tope de 150 perfiles servidos al día |
+| GET | `/api/profiles/:userId` | JWT | Solo el perfil **propio** (otro id → 404) |
 | POST | `/api/auth/logout-all` | JWT | Restablece **todas** las sesiones del usuario |
 | POST | `/api/auth/forgot-password` | — (rate limit 3/h) | Siempre responde igual; si la cuenta existe, envía email |
 | POST | `/api/auth/reset-password` | — (rate limit 3/h) | Token de un solo uso (hash en BD), 30 min |
@@ -78,6 +78,8 @@ Las rutas autenticadas añaden `authMiddleware` (JWT + `token_version`) y `userL
 | POST | `/api/matches/:matchId/read` | JWT | Marca el chat como leído (baja el badge) |
 | POST | `/api/matches/:matchId/block` | JWT | Cierra el chat para las dos partes (idempotente) |
 | POST | `/api/matches/:matchId/report` | JWT | Registra el motivo Y bloquea a la vez |
+| GET | `/api/account/export` | JWT | JSON con los datos propios (US-013), sin datos de terceros |
+| POST | `/api/account/delete` | JWT + contraseña (5/15 min por usuario) | Borra la cuenta al momento (US-012); `204`, o `403` si la contraseña no coincide |
 | GET | `/health` | — | Comprobación de vida |
 
 ### Paginación (contrato de las listas)
@@ -116,11 +118,37 @@ match no existe, responde **404** en los dos casos por igual (no delata si el ma
 `matches.blocked_by` / `blocked_at` (migración `010`): **simétrico**, cierra el chat para las dos
 partes por igual, no solo para quien lo activó — `createMessage` lo comprueba y devuelve 403;
 `getMessages` sigue funcionando (el historial no se borra). `getMatches`/`getMatch` nunca exponen el
-uuid de quién bloqueó, solo `blocked` y `blocked_by_me` (calculados en `withBlockInfo`).
+uuid de quién bloqueó, solo `blocked` y `blocked_by_me` (calculados en `withBlockInfo`). Quien **fue**
+bloqueado recibe `profile_hidden: true` y ningún dato de perfil de quien le bloqueó (ni foto, ni
+ubicación, ni id): si esa persona cambia de ubicación, no se puede seguir. Quien bloqueó sí lo ve.
 
-Reportar (`match_reports`: `match_id`, `reporter_id`, `reason`, lista cerrada en `REPORT_REASONS`)
-bloquea a la vez — protege a quien reporta sin un paso aparte. Bloquear solo (sin reportar) también
-existe, para "ya no quiero hablar" sin necesidad de alegar un motivo.
+Reportar (`match_reports`: `match_id`, `reporter_id`, `reported_user_id`, `reason`, lista cerrada en
+`REPORT_REASONS`) bloquea a la vez — protege a quien reporta sin un paso aparte. Bloquear solo (sin
+reportar) también existe, para "ya no quiero hablar" sin necesidad de alegar un motivo.
+
+**Los reportes sobreviven al borrado de cuenta (migración `013`):** `match_id` y `reporter_id` pasan a
+`NULL` y `reported_user_id` no tiene FK. Si se borra una cuenta con reportes en contra, se guarda un HMAC
+de su email en `reported_account_deletions` (`utils/reportedAccounts.js`, clave derivada de `JWT_SECRET`);
+un registro nuevo con ese email deja el evento `signup_reported_returning` en la auditoría, sin cambiar la
+respuesta. Base legal: interés legítimo (seguridad); tiene que constar en la política de privacidad.
+
+### Exportar y borrar la cuenta (GDPR, `accountController.js`)
+
+**Exportar** (`GET /api/account/export`): devuelve `account` (id, email, alta), `profile`, `swipes` dados,
+`matches` (id, fecha, `blocked_by_me`), `messages_sent` y `reports_filed`. Solo datos **propios**: ni el
+perfil ni los mensajes de la otra persona. Nunca sale nada de seguridad (`password_hash`, `token_version`,
+bloqueos, token de reset). El frontend lo descarga como `nura-mis-datos-AAAA-MM-DD.json`.
+
+**Borrar** (`POST /api/account/delete`, body `{ password }`): pide la contraseña aunque haya sesión (un
+token robado o una pestaña abierta no bastan) y responde **403**, no 401, si no coincide: `api/client.js`
+cierra la sesión ante cualquier 401. `swipes`, `matches`, `messages.sender_id` y `matches.blocked_by`
+apuntan a `users` **sin** `ON DELETE CASCADE`, así que un `DELETE FROM users` a secas falla por FK. Orden,
+en una transacción: `matches` (arrastra `messages` y `match_reports`) → `swipes` (en los dos sentidos) →
+`users` (arrastra `profiles`). Decisiones de producto: borrado **inmediato** (sin periodo de gracia) y
+conversaciones borradas **enteras**, también para la otra persona. Tras el `COMMIT` se borra la carpeta
+`{userId}/` entera de Storage (`deleteUserPhotos`), no solo la foto del perfil: una foto subida y nunca
+guardada, o una antigua cuyo borrado falló, también es del usuario. Si falla Storage, la cuenta ya está
+borrada y se registra el `user_id` para limpiar a mano.
 
 ### Tope diario de swipes (calidad sobre cantidad)
 
@@ -142,7 +170,11 @@ técnico: por eso se aplica en el servidor y no solo en la interfaz, para que no
 
 ### Datos
 
-PostgreSQL con `users`, `profiles`, `swipes`, `matches` y `messages` (esta última pendiente). Reglas de negocio en BD: unicidad de swipe por par, borrado en cascada al eliminar usuario y match automático cuando ambos dicen sí. Consultas siempre parametrizadas (`$1`, `$2`…).
+PostgreSQL con `users`, `profiles`, `swipes`, `matches`, `messages` y `match_reports`. Reglas de negocio en BD: unicidad de swipe por par. Solo `profiles`, `messages` (vía `matches`) y `match_reports` borran en cascada; `swipes` y `matches` no, por eso borrar una cuenta va tabla a tabla (ver "Exportar y borrar la cuenta"). Consultas siempre parametrizadas (`$1`, `$2`…).
+
+**Tope diario del feed (migración `012`):** `users.feed_served_on` / `feed_served_count`. `getFeed` reserva cupo con un `UPDATE ... FOR UPDATE` atómico (peticiones en paralelo no se lo saltan) hasta `FEED_DAILY_CAP` (150 = 10× los swipes) y devuelve lo no servido. Al llegar, página vacía con `feed_limit_reached: true`. Sin esto, el feed se recorría con el cursor sin hacer swipes y se bajaba a todos los usuarios.
+
+**API REST de Supabase cerrada (migración `011`):** Nura no usa PostgREST ni Supabase Auth; el backend entra como `postgres` (omite RLS). Las 6 tablas tienen RLS activo y `anon`/`authenticated` no tienen ningún permiso de tabla, secuencia ni función en `public` (también por *default privileges*, para las tablas futuras creadas por `postgres`). **Toda tabla nueva** lleva `ENABLE ROW LEVEL SECURITY` en su migración: Supabase concede por defecto permisos a `anon` en cada tabla nueva de `public`.
 
 **Índices** (migración local `003`, aplicada): el orden base `(created_at DESC, id DESC)` y cada filtro del feed (tipo, ubicación) combinado con ese orden, más edad; en `matches`, por usuario y orden; en `messages`, por match y orden (chat). Se eliminaron los redundantes que ya cubren las restricciones `UNIQUE`. Comprobar con `EXPLAIN ANALYZE`.
 
@@ -175,9 +207,15 @@ sin listado posible con la clave anon — comprobado). Todas las escrituras (sub
 las hace el backend con la **service key** (`SUPABASE_SERVICE_KEY`, nunca en el frontend, omite RLS).
 
 - `POST /api/profiles/photo` (multipart, campo `photo`): valida tipo real por cabecera de fichero
-  (no el `mimetype` que manda el navegador) y tamaño (≤ 5 MB); sube con nombre aleatorio bajo
-  `{userId}/...`; borra la foto anterior del usuario si había. Devuelve `{ photo_url }`; el cliente
-  la incluye al crear/editar el perfil (este endpoint no toca la base de datos).
+  (no el `mimetype` que manda el navegador) y tamaño (≤ 5 MB); **vuelve a codificar** la imagen con
+  `sharp` (`cleanImage`): sin EXIF/GPS/XMP ni datos tras la imagen, orientación aplicada, ≤ 1600 px y
+  tope de 40 MP de entrada contra bombas de descompresión. Sube con nombre aleatorio bajo `{userId}/...`
+  y borra la foto anterior si había. Devuelve `{ photo_url }`; el cliente la incluye al crear/editar el
+  perfil (este endpoint no toca la base de datos).
+- `photo_url` en `POST`/`PUT /api/profiles` solo se acepta si es una URL de **su propia** carpeta del
+  bucket con el formato de la subida (`isOwnPhotoUrl`): nada de URLs externas (píxel espía que registra
+  la IP de quien ve el perfil) ni fotos de otro usuario.
+- Toda llamada a Storage y a Resend tiene tiempo límite de 10 s (`AbortSignal.timeout`).
 - La URL pública pasa por el CDN de Supabase (`cache-control: max-age=300`): tras reemplazar una
   foto, la anterior puede seguir sirviéndose desde caché hasta 5 min aunque el origen ya la borró.
   Nunca se vuelve a devolver esa URL, así que no hay forma de encontrarla salvo tenerla ya guardada.
@@ -219,7 +257,8 @@ scope del MVP), es un **reordenado transparente** de la página que ya se iba a 
 
 ## 4. Frontend
 
-- **Rutas:** un único `<BrowserRouter>` con dos ramas protegidas por layout (`RequireAuth`, `RedirectIfAuthed`), no dos árboles de router condicionales. Sin sesión → `/` (registro) y `/login` bajo `AuthLayout`; con sesión → `/dashboard`, `/profile/create`, `/feed`, `/matches`, todas bajo `AppShell`.
+- **Rutas:** un único `<BrowserRouter>` con dos ramas protegidas por layout (`RequireAuth`, `RedirectIfAuthed`), no dos árboles de router condicionales. Sin sesión → `/` (registro) y `/login` bajo `AuthLayout`; con sesión → `/dashboard`, `/profile/create`, `/feed`, `/matches`, `/settings`, todas bajo `AppShell`.
+- **Ajustes (`Settings.jsx`, `/settings`):** sin pestaña propia (la barra se queda en 4); se entra desde el enlace "Ajustes" de Perfil. Tres bloques: descargar mis datos (único botón relleno), cerrar todas las sesiones (`logout-all`) y borrar mi cuenta. Borrar tiene un segundo paso en la propia pantalla, sin `window.confirm`: lista literal de lo que se borra + contraseña; mientras dura, los otros dos bloques se ocultan. Tras borrar, una pantalla "Cuenta borrada" confirma lo que pasó antes de salir.
 - **Navegación autenticada (`AppShell.jsx`):** una barra inferior fija con 4 pestañas (Inicio, Descubrir, Matches, Perfil), igual en las cuatro pantallas y con el mismo lenguaje visual (subrayado en `nura`) que el selector de Crear cuenta/Entrar de `AuthLayout`. Nada de menús que aparecen y desaparecen: "dónde estoy" se ve siempre igual.
 - **Señales de compatibilidad (`ProfileFeed.jsx`):** calculadas en el cliente comparando el propio perfil con cada tarjeta (etiquetas de neurotipo en común —cualquier solape, no las mismas exactas—, misma ubicación, edad parecida ≤3 años). Se muestran como hechos literales, nunca como una puntuación o un porcentaje; no hay backend ni algoritmo de recomendación detrás.
 - **Chat (`Chat.jsx`, ruta `/matches/:matchId`):** deliberadamente fuera de `AppShell` (excepción, igual que `AuthLayout`): una conversación necesita el alto completo, no compartir la franja fija con la barra de navegación. Carga el match por `GET /api/swipes/matches/:matchId` (funciona también al recargar o entrar por enlace directo, no solo navegando desde la lista), hace polling cada 2 s solo con la pestaña visible, marca como leído al abrir y muestra el aviso de US-010 una vez superados 5 mensajes (se recuerda cerrado en `localStorage`, por match).

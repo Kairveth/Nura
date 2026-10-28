@@ -1,8 +1,8 @@
 import pool from '../db.js';
 import { log } from '../utils/logger.js';
-import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js';
+import { parseLimit, parseCursor, toPage } from '../utils/pagination.js';
 import { sanitizeText } from '../utils/sanitize.js';
-import { sniffImageMime, replaceProfilePhoto } from '../utils/storage.js';
+import { sniffImageMime, cleanImage, replaceProfilePhoto, isOwnPhotoUrl } from '../utils/storage.js';
 import { countSwipesToday, DAILY_SWIPE_LIMIT } from './swipeController.js';
 import { sortByAffinity } from '../utils/affinity.js';
 
@@ -51,6 +51,11 @@ const validNeurotipos = (value) => {
   return unique;
 };
 
+// photo_url (si viene) solo puede ser una foto de la carpeta propia del bucket (ver isOwnPhotoUrl).
+// Devuelve el mensaje de error o null. Compartido entre crear y actualizar perfil.
+const photoUrlError = (userId, photo_url) =>
+  photo_url !== undefined && !isOwnPhotoUrl(userId, photo_url) ? 'Invalid photo_url' : null;
+
 // Devuelve un mensaje de error o null. Con `partial`, solo valida los campos presentes.
 const validateProfile = ({ description, age, location, neurotipos, intention }, { partial = false } = {}) => {
   const missing = (v) => v === undefined || v === null || v === '';
@@ -71,11 +76,8 @@ export const createProfile = async (req, res) => {
     const location = clean(req.body?.location);
     const userId = req.user.id;
 
-    const error = validateProfile({ description, age, location, neurotipos, intention });
+    const error = validateProfile({ description, age, location, neurotipos, intention }) || photoUrlError(userId, photo_url);
     if (error) return res.status(400).json({ error });
-    if (photo_url !== undefined && (typeof photo_url !== 'string' || photo_url.length > 500)) {
-      return res.status(400).json({ error: 'Invalid photo_url' });
-    }
 
     const result = await pool.query(
       `INSERT INTO profiles (user_id, description, age, location, neurodivergence_types, intention, photo_url)
@@ -101,11 +103,8 @@ export const updateProfile = async (req, res) => {
     const location = clean(req.body?.location);
     const userId = req.user.id;
 
-    const error = validateProfile({ description, age, location, neurotipos, intention }, { partial: true });
+    const error = validateProfile({ description, age, location, neurotipos, intention }, { partial: true }) || photoUrlError(userId, photo_url);
     if (error) return res.status(400).json({ error });
-    if (photo_url !== undefined && (typeof photo_url !== 'string' || photo_url.length > 500)) {
-      return res.status(400).json({ error: 'Invalid photo_url' });
-    }
 
     const updates = ['updated_at = NOW()'];
     const values = [userId];
@@ -152,8 +151,16 @@ export const uploadPhoto = async (req, res) => {
     const mime = sniffImageMime(req.file.buffer);
     if (!mime) return res.status(400).json({ error: 'Photo must be JPEG or PNG' });
 
+    let clean;
+    try {
+      clean = await cleanImage(req.file.buffer, mime);
+    } catch {
+      // Cabecera de JPEG/PNG pero contenido corrupto, truncado o demasiado grande al descomprimir
+      return res.status(400).json({ error: 'Photo could not be processed' });
+    }
+
     const existing = await pool.query('SELECT photo_url FROM profiles WHERE user_id = $1', [req.user.id]);
-    const photo_url = await replaceProfilePhoto(req.user.id, req.file.buffer, mime, existing.rows[0]?.photo_url);
+    const photo_url = await replaceProfilePhoto(req.user.id, clean, mime, existing.rows[0]?.photo_url);
 
     res.status(201).json({ photo_url });
   } catch (err) {
@@ -162,12 +169,13 @@ export const uploadPhoto = async (req, res) => {
   }
 };
 
-export const getProfile = async (req, res) => {
+// GET /api/profiles/me — SOLO el perfil propio (sale de la sesión, sin id en la ruta). Los perfiles
+// ajenos llegan por el feed (los que aún no has valorado) o por tus matches; no hay forma de pedir el de
+// otra persona por id. Esto evitaba que quien fue bloqueado siguiera consultando el perfil actualizado
+// (ubicación incluida) de quien le bloqueó.
+export const getMyProfile = async (req, res) => {
   try {
-    const { userId } = req.params;
-    if (!isUuid(userId)) return res.status(404).json({ error: 'Profile not found' });
-
-    const result = await pool.query(`SELECT ${COLUMNS} FROM profiles WHERE user_id = $1`, [userId]);
+    const result = await pool.query(`SELECT ${COLUMNS} FROM profiles WHERE user_id = $1`, [req.user.id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Profile not found' });
@@ -179,6 +187,36 @@ export const getProfile = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch profile' });
   }
 };
+
+// Tope de perfiles SERVIDOS al día (no solo valorados): sin él, el feed se recorría con el cursor sin hacer
+// ningún swipe y se bajaba a todos los usuarios con su neurotipo (dato de salud). 10x el tope de swipes:
+// de sobra para valorar 15 y cambiar de filtros varias veces; un scraper se queda en 150 por cuenta y día.
+export const FEED_DAILY_CAP = DAILY_SWIPE_LIMIT * 10;
+
+// Reserva en UNA sentencia y devuelve cuántos perfiles puede servir esta petición. `FOR UPDATE` bloquea la
+// fila del usuario: peticiones en paralelo esperan su turno y no pueden pasarse del tope entre las dos.
+// El contador se reinicia solo al cambiar de día (UTC).
+const reserveFeedQuota = async (userId, wanted) => {
+  const { rows } = await pool.query(
+    `WITH cur AS (
+       SELECT CASE WHEN feed_served_on = CURRENT_DATE THEN feed_served_count ELSE 0 END AS used
+       FROM users WHERE id = $1 FOR UPDATE
+     ), g AS (
+       SELECT used, LEAST($2::int, GREATEST(0, $3::int - used)) AS granted FROM cur
+     )
+     UPDATE users u SET feed_served_count = g.used + g.granted, feed_served_on = CURRENT_DATE
+     FROM g WHERE u.id = $1
+     RETURNING g.granted`,
+    [userId, wanted, FEED_DAILY_CAP]
+  );
+  return rows[0]?.granted ?? 0;
+};
+
+const refundFeedQuota = (userId, unused) =>
+  pool.query(
+    'UPDATE users SET feed_served_count = GREATEST(0, feed_served_count - $2) WHERE id = $1 AND feed_served_on = CURRENT_DATE',
+    [userId, unused]
+  );
 
 // GET /api/profiles/feed?limit=10&cursor=<opaco>&age_min=&age_max=&location=&neurotipos=TDAH&neurotipos=TEA
 // Filtra por solape: cualquier perfil que comparta AL MENOS una de las etiquetas pedidas.
@@ -221,7 +259,13 @@ export const getFeed = async (req, res) => {
     if (cleanLocation) add('p.location = ?', cleanLocation);
     if (neurotipos.length > 0) add('p.neurodivergence_types && ?::text[]', neurotipos);
 
-    values.push(limit + 1);
+    const swipesToday = await countSwipesToday(userId);
+    const granted = await reserveFeedQuota(userId, limit);
+    if (granted === 0) {
+      return res.json({ data: [], next_cursor: null, feed_limit_reached: true, swipes_today: swipesToday, daily_limit: DAILY_SWIPE_LIMIT });
+    }
+
+    values.push(granted + 1);
     const result = await pool.query(
       `SELECT ${FEED_COLUMNS} FROM profiles p
        WHERE ${where.join(' AND ')}
@@ -230,8 +274,9 @@ export const getFeed = async (req, res) => {
       values
     );
 
-    const swipesToday = await countSwipesToday(userId);
-    const page = toPage(result.rows, limit); // el cursor sale de aquí, con el orden cronológico real
+    const page = toPage(result.rows, granted); // el cursor sale de aquí, con el orden cronológico real
+    // Solo cuenta lo que de verdad se sirvió: una página corta (fin del feed, filtros estrechos) devuelve el resto
+    if (page.data.length < granted) await refundFeedQuota(userId, granted - page.data.length);
 
     // Reordena SOLO esta página ya decidida hacia mayor afinidad (nunca oculta ni salta a nadie:
     // ver utils/affinity.js). Si el perfil propio no existe todavía, se enseña en orden normal.

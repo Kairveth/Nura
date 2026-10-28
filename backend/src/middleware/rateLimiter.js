@@ -42,6 +42,15 @@ export const passwordResetLimiter = limiter({
   message: { error: 'Too many requests' }
 });
 
+// Borrar la cuenta: 5 intentos / 15 min por usuario. Pide la contraseña, así que se limita igual
+// que el login: un token robado no sirve para adivinarla a base de intentos.
+export const accountDeleteLimiter = limiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => (req.user ? `u:${req.user.id}` : ipKeyGenerator(req.ip)),
+  message: { error: 'Too many attempts' }
+});
+
 // Enviar mensajes: 10 / min por usuario (checklist de seguridad, punto 5). Aparte del límite general
 // de userLimiter, que ya cubre la lectura por polling (2s = 30 peticiones/min, dentro de su cupo).
 export const messageLimiter = limiter({

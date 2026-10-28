@@ -48,7 +48,7 @@
 - [ ] Emails: hashear para matching (opcional)
 - [ ] Fotos: stored en S3/CDN con access control, not public
 - [ ] Chat messages: encrypted at rest (opcional MVP, priority post-MVP)
-- [ ] Borrar datos cuando user deletes account (cascade)
+- [x] Borrar datos cuando user deletes account (`POST /api/account/delete`: transacción matches → swipes → users, porque swipes/matches no tienen cascada; después la carpeta de fotos del usuario)
 
 **Test:** GET /user/:id — response no incluye password field
 
@@ -66,7 +66,7 @@
 
 - [ ] Log: "user login attempt" (NO email)
 - [ ] Log: "message sent" (NO content)
-- [ ] Log: "profile deleted" (NO PII)
+- [x] Log: "profile deleted" (NO PII) — `account_deleted`, `account_delete_denied`, `data_exported`: solo `user_id`
 - [ ] Log only: user_id, action, timestamp
 
 **Test:** grep password logs.txt — zero matches
@@ -75,10 +75,10 @@
 
 - [ ] Privacy policy en landing (EU requirement)
 - [ ] Terms of service (cover: neurodivergent protection, ghosting policy)
-- [ ] Data export (US-013): JSON descargable
-- [ ] Account deletion (US-012): 30-day grace, then permanent
+- [x] Data export (US-013): JSON descargable (`GET /api/account/export`, solo datos propios)
+- [x] Account deletion (US-012): borrado inmediato y definitivo, con contraseña (decisión 2026-10-27: sin periodo de gracia)
 
-**Test:** DELETE /user/:id → data gone 24h
+**Test:** POST /api/account/delete con la contraseña → 204, y 0 filas del usuario en users, profiles, swipes, matches y messages. **Excepción deliberada (migración 013):** `match_reports` se conserva por interés legítimo (las pruebas de un reporte no las puede borrar el reportado); al borrar la cuenta se desvincula (`reporter_id`/`match_id` → NULL) y el email queda solo como huella HMAC, no como dato personal.
 
 ## 10. Monitoring + Alerting (MVP minimal)
 

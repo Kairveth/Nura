@@ -139,8 +139,9 @@ export default function Chat() {
         {match ? (
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold text-ink">
-              {match.age} años{match.location ? ` · ${match.location}` : ''}
-              {match.intention ? ` · ${match.intention}` : ''}
+              {match.profile_hidden
+                ? 'Perfil no disponible'
+                : `${match.age} años${match.location ? ` · ${match.location}` : ''}${match.intention ? ` · ${match.intention}` : ''}`}
             </p>
             <p className="truncate text-xs text-mute">{(match.neurotipos ?? []).join(' · ')}</p>
           </div>

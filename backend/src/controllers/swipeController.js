@@ -8,11 +8,17 @@ export const DAILY_SWIPE_LIMIT = 15;
 
 // Convierte las columnas internas (blocked_by, blocked_at) en dos banderas simples para el cliente:
 // nunca se expone el uuid de quién bloqueó, solo si está bloqueado y si fui yo quien lo hizo.
-const withBlockInfo = (userId) => ({ blocked_by, blocked_at, ...row }) => ({
-  ...row,
-  blocked: Boolean(blocked_at),
-  blocked_by_me: blocked_by === userId
-});
+// Si te bloquearon, dejas de recibir el perfil de quien lo hizo: si cambia de foto o de ubicación, no
+// debes poder seguirlo (vector de acoso). Quien bloqueó sí lo sigue viendo: necesita saber a quién bloqueó.
+const HIDDEN_PROFILE = {
+  matched_user_id: null, photo_url: null, description: null, age: null, location: null, neurotipos: [], intention: null
+};
+const withBlockInfo = (userId) => ({ blocked_by, blocked_at, ...row }) => {
+  const blocked = Boolean(blocked_at);
+  const blockedByMe = blocked_by === userId;
+  const profileHidden = blocked && !blockedByMe;
+  return { ...row, ...(profileHidden && HIDDEN_PROFILE), blocked, blocked_by_me: blockedByMe, profile_hidden: profileHidden };
+};
 
 export const countSwipesToday = async (userId) => {
   const { rows } = await pool.query(
