@@ -72,3 +72,13 @@ export const matchReason = (mine, other) => {
 
   return { comun, complementa };
 };
+
+// Reordena SOLO la página ya paginada (array corto) hacia mayor afinidad por percepción. No decide QUIÉN
+// aparece (eso es el filtro del feed) ni toca el cursor (se calcula antes). Orden estable: las tarjetas sin
+// puntuar (scoreMatch null → no puntuable) van al final conservando el orden cronológico, así que si yo aún
+// no he respondido lo suficiente, el feed queda tal cual.
+export const sortByPerception = (mine, rows) =>
+  [...rows]
+    .map((row) => ({ row, score: scoreMatch(mine, row) ?? -1 }))
+    .sort((a, b) => b.score - a.score)
+    .map(({ row }) => row);

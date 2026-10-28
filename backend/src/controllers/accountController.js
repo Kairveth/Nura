@@ -15,7 +15,8 @@ export const exportData = async (req, res) => {
       pool.query('SELECT id, email, created_at FROM users WHERE id = $1', [userId]),
       pool.query(
         `SELECT photo_url, description, age, location, neurodivergence_types AS neurotipos, intention,
-                created_at, updated_at
+                perc_ritmo, perc_estructura, perc_sensorial, perc_comunicacion, perc_emocional, perc_social,
+                connection_note, created_at, updated_at
          FROM profiles WHERE user_id = $1`,
         [userId]
       ),
