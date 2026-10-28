@@ -4,7 +4,7 @@ import { parseLimit, parseCursor, toPage } from '../utils/pagination.js';
 import { sanitizeText } from '../utils/sanitize.js';
 import { sniffImageMime, cleanImage, replaceProfilePhoto, isOwnPhotoUrl } from '../utils/storage.js';
 import { countSwipesToday, DAILY_SWIPE_LIMIT } from './swipeController.js';
-import { sortByPerception, matchReason, DIMENSIONS } from '../utils/perception.js';
+import { sortByPerception, matchReason, DIMENSIONS, pickPerc, stripPerc } from '../utils/perception.js';
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const MAX_NEUROTIPOS = 6; // varias etiquetas están bien (TDAH + TEA...), todas a la vez ya no informa nada
@@ -313,10 +313,7 @@ export const getFeed = async (req, res) => {
     const myPerc = mine.rows[0] ?? null;
     if (myPerc) page.data = sortByPerception(myPerc, page.data); // null → sin reordenar (cronológico)
     // match_reason cualitativo; NO se exponen los perc_* crudos de la otra persona (son datos íntimos)
-    page.data = page.data.map(({ perc_ritmo, perc_estructura, perc_sensorial, perc_comunicacion, perc_emocional, perc_social, ...card }) => ({
-      ...card,
-      match_reason: matchReason(myPerc, { perc_ritmo, perc_estructura, perc_sensorial, perc_comunicacion, perc_emocional, perc_social })
-    }));
+    page.data = page.data.map((card) => ({ ...stripPerc(card), match_reason: matchReason(myPerc, pickPerc(card)) }));
 
     res.json({ ...page, swipes_today: swipesToday, daily_limit: DAILY_SWIPE_LIMIT });
   } catch (err) {

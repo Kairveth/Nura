@@ -1,7 +1,7 @@
 import pool from '../db.js';
 import { log } from '../utils/logger.js';
 import { parseLimit, parseCursor, toPage, isUuid } from '../utils/pagination.js';
-import { matchReason } from '../utils/perception.js';
+import { matchReason, pickPerc, stripPerc } from '../utils/perception.js';
 
 // Tope diario de valoraciones: es la palanca de "calidad sobre cantidad", no un límite técnico.
 // Menos perfiles por día empuja a decidir con atención en vez de acumular swipes sin pensar.
@@ -163,12 +163,11 @@ export const getMatch = async (req, res) => {
     );
     const myPerc = mineRes.rows[0] ?? null;
     // No se exponen los perc_* crudos de la otra persona (datos íntimos): se calcula el porqué y se quitan.
-    const { perc_ritmo, perc_estructura, perc_sensorial, perc_comunicacion, perc_emocional, perc_social, ...row } = rows[0];
-    const result = withBlockInfo(userId)(row);
+    const result = withBlockInfo(userId)(stripPerc(rows[0]));
     // Si el perfil está oculto (bloqueo), no se muestra el porqué del match.
     result.match_reason = result.profile_hidden
-      ? { comun: [], complementa: [] }
-      : matchReason(myPerc, { perc_ritmo, perc_estructura, perc_sensorial, perc_comunicacion, perc_emocional, perc_social });
+      ? { comun: [], complementa: [], friccion: [] }
+      : matchReason(myPerc, pickPerc(rows[0]));
     res.json(result);
   } catch (err) {
     log('ERROR', 'get match failed', { code: err.code, message: err.message });

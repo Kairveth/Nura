@@ -221,16 +221,16 @@ export default function Chat() {
         <div className="mx-4 mt-3 rounded-2xl border border-line bg-white/50 p-3 text-sm text-mute">Esta conversación está cerrada.</div>
       )}
 
-      {!match?.blocked && (match?.match_reason?.complementa?.length > 0 || match?.match_reason?.comun?.length > 0) && (
+      {!match?.blocked && (match?.match_reason?.complementa?.length > 0 || match?.match_reason?.friccion?.length > 0) && (
         <div className="mx-4 mt-3 space-y-1.5 rounded-2xl border border-sage bg-sage/15 p-3 text-sm text-ink">
           {match.match_reason.complementa?.length > 0 && (
             <p>
               <span className="font-semibold">En qué os complementáis:</span> {labelList(match.match_reason.complementa)}
             </p>
           )}
-          {match.match_reason.comun?.length > 0 && (
+          {match.match_reason.friccion?.length > 0 && (
             <p>
-              <span className="font-semibold">Tenéis en común:</span> {labelList(match.match_reason.comun)}
+              <span className="font-semibold">Qué os puede costar hablar:</span> {labelList(match.match_reason.friccion)}
             </p>
           )}
         </div>
