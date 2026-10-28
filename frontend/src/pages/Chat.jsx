@@ -3,18 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import client from '../api/client';
 import { useAuthStore } from '../store/authStore';
 import { labelList } from '../lib/perceptionLabels';
+import { conversationStarters, STARTER_VARIANTS } from '../lib/conversationStarters';
 
 const POLL_MS = 2000;
 const MEETUP_THRESHOLD = 5; // US-010: sugerir quedar a partir de este número de mensajes
 const MAX_MESSAGE_LENGTH = 2000;
 const REPORT_REASONS = ['Comportamiento inapropiado', 'Spam o publicidad', 'Me siento inseguro/a', 'Otro'];
-// Preguntas concretas, no "¿qué tal?" vago: ayudan a arrancar sin depender de leer señales implícitas.
-const STARTERS = [
-  '¿Qué es lo primero que haces al llegar a casa?',
-  '¿Tienes algún interés al que dediques mucho tiempo?',
-  '¿Prefieres planes tranquilos o con más gente?',
-  '¿Hay algo que te gustaría que supiera de ti desde ya?'
-];
 
 // Chat es una pantalla aparte, sin la barra inferior de AppShell: aquí solo importa la conversación
 // (igual que el flujo de auth tiene su propio espacio, sin competir por la misma franja fija).
@@ -27,6 +21,7 @@ export default function Chat() {
   const [error, setError] = useState('');
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [starterVariant, setStarterVariant] = useState(0);
   const [meetupDismissed, setMeetupDismissed] = useState(() => localStorage.getItem(`meetup-dismissed-${matchId}`) === '1');
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
@@ -252,17 +247,26 @@ export default function Chat() {
           <div className="space-y-4 text-center">
             <p className="text-mute">Todavía no hay mensajes. Elige una pregunta o escribe la tuya.</p>
             {!match?.blocked && (
-              <div className="flex flex-wrap justify-center gap-2">
-                {STARTERS.map((starter) => (
-                  <button
-                    key={starter}
-                    type="button"
-                    onClick={() => setDraft(starter)}
-                    className="rounded-2xl border border-line bg-white/70 px-3 py-2 text-left text-sm text-ink hover:border-nura focus-visible:outline focus-visible:outline-2 focus-visible:outline-nura"
-                  >
-                    {starter}
-                  </button>
-                ))}
+              <div className="space-y-3">
+                <div className="flex flex-wrap justify-center gap-2">
+                  {conversationStarters(match?.match_reason, matchId, starterVariant).map((starter) => (
+                    <button
+                      key={starter}
+                      type="button"
+                      onClick={() => setDraft(starter)}
+                      className="rounded-2xl border border-line bg-white/70 px-3 py-2 text-left text-sm text-ink hover:border-nura focus-visible:outline focus-visible:outline-2 focus-visible:outline-nura"
+                    >
+                      {starter}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStarterVariant((v) => (v + 1) % STARTER_VARIANTS)}
+                  className="text-sm text-mute underline underline-offset-4 hover:text-nura focus-visible:outline focus-visible:outline-2 focus-visible:outline-nura"
+                >
+                  Otra sugerencia
+                </button>
               </div>
             )}
           </div>
